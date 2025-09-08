@@ -2,6 +2,7 @@ package com.ccubas.camera
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.view.View
 import androidx.camera.core.*
@@ -48,7 +49,9 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import coil.ImageLoader
 import coil.compose.AsyncImage
+import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
 import com.ccubas.camera.components.CropperFullScreen
 import com.ccubas.composecamera.models.CameraMode
@@ -84,8 +87,14 @@ fun MediaCameraScreen(
         vm.setConfig(config)
     }
     val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    val exec = remember(ctx) { ContextCompat.getMainExecutor(ctx) }
+    val exec = rememberSaveable(ctx) { ContextCompat.getMainExecutor(ctx) }
     val ui by vm.ui.collectAsState()
+
+    val imageLoader = rememberSaveable {
+        ImageLoader.Builder(ctx).components {
+            add(VideoFrameDecoder.Factory())
+        }.build()
+    }
 
     LaunchedEffect(Unit) { vm.loadThumbs() }
 
@@ -274,6 +283,19 @@ fun MediaCameraScreen(
                 ) {
                     itemsIndexed(ui.thumbs, key = { _, t -> t.uri.toString() }) { _, t ->
                         val selected = t.uri in ui.selected
+
+                        val request = if (t.isVideo) {
+                            ImageRequest.Builder(ctx)
+                                .data(t.uri)
+                                .setParameter(VideoFrameDecoder.VIDEO_FRAME_MICROS_KEY, 1_000_000L) // 1s
+                                .setParameter(
+                                    VideoFrameDecoder.VIDEO_FRAME_OPTION_KEY,
+                                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+                                )
+                                .build()
+                        } else {
+                            ImageRequest.Builder(ctx).data(t.uri).build()
+                        }
                         Box(
                             Modifier
                                 .size(70.dp)
@@ -291,7 +313,8 @@ fun MediaCameraScreen(
                                 )
                         ) {
                             AsyncImage(
-                                model = ImageRequest.Builder(ctx).data(t.uri).build(),
+                                model = request,
+                                imageLoader = imageLoader,
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
@@ -540,6 +563,16 @@ fun MediaCameraScreen(
                         ) {
                             itemsIndexed(gridItems, key = { _, t -> t.uri.toString() }) { _, t ->
                                 val selected = t.uri in ui.selected
+                                val request = if (t.isVideo) {
+                                    ImageRequest.Builder(ctx)
+                                        .data(t.uri)
+                                        .setParameter(VideoFrameDecoder.VIDEO_FRAME_MICROS_KEY, 1_000_000L) // frame al 1s
+                                        .build()
+                                } else {
+                                    ImageRequest.Builder(ctx)
+                                        .data(t.uri)
+                                        .build()
+                                }
                                 Box(
                                     Modifier
                                         .aspectRatio(1f)
@@ -548,7 +581,8 @@ fun MediaCameraScreen(
                                         .clickable { vm.toggleSelect(t.uri) }
                                 ) {
                                     AsyncImage(
-                                        model = ImageRequest.Builder(ctx).data(t.uri).build(),
+                                        model = request,
+                                        imageLoader = imageLoader,
                                         contentDescription = null,
                                         modifier = Modifier.fillMaxSize(),
                                         contentScale = ContentScale.Crop

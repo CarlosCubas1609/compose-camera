@@ -68,6 +68,7 @@ dependencies {
     implementation(libs.androidx.material3)
 
     implementation(libs.io.coil)
+    implementation(libs.coil.video)
     implementation(libs.androidx.icons)
     implementation(libs.lifecycle.viewmodel.compose)
 

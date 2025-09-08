@@ -195,6 +195,7 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
                 while (c.moveToNext() && i++ < limit) {
                     val id = c.getLong(iId); val dt = c.getLong(iDt)
                     val u = ContentUris.withAppendedId(uri, id)
+                    //val thumbnail = if (isVideo) VideoThumbnailUtils.generate(app, u) else null
                     add(dt to Thumb(u, isVideo))
                 }
             }
