@@ -49,6 +49,8 @@ android {
     publishing {
         singleVariant("release") { withSourcesJar() }
     }
+
+
 }
 
 dependencies {
@@ -78,6 +80,37 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
 }
 
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                from(components["release"])
+                groupId = "com.github.carloscubas1609"
+                artifactId = "compose-camera"
+                version = "1.0.0"
+                pom {
+                    name.set("compose-camera")
+                    description.set("Compose Camera")
+                    url.set("https://github.com/CarlosCubas1609/compose-camera")
+                    licenses { license { name.set("Apache-2.0"); url.set("https://www.apache.org/licenses/LICENSE-2.0") } }
+                    scm { url.set("https://github.com/CarlosCubas1609/compose-camera") }
+                    developers { developer { id.set("CarlosCubas1609"); name.set("Carlos Cubas") } }
+                }
+            }
+        }
+        repositories {
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/CarlosCubas1609/compose-camera")
+                credentials {
+                    username = keystoreProperties["GITHUB_ACTOR"] as String? ?: System.getenv("GITHUB_ACTOR")
+                    password = keystoreProperties["GITHUB_TOKEN"] as String? ?: System.getenv("GITHUB_TOKEN")
+                }
+            }
+        }
+    }
+}
+/*
 publishing {
     publications {
         create<MavenPublication>("release") {
@@ -104,4 +137,4 @@ publishing {
             }
         }
     }
-}
+}*/
