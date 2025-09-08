@@ -44,6 +44,24 @@ import java.nio.ByteBuffer
 import java.util.concurrent.Executor
 import kotlin.math.max
 
+/**
+ * Represents the state of the media camera UI.
+ *
+ * @param mode The current camera mode (Photo or Video).
+ * @param recording Whether video recording is currently active.
+ * @param recSeconds The duration of the current recording in seconds.
+ * @param torchOn Whether the torch (flashlight) is currently on.
+ * @param flashMode The current flash mode for image capture.
+ * @param thumbs The list of media thumbnails to display in the carousel.
+ * @param gallery The list of media items to display in the main gallery view.
+ * @param selected The list of currently selected media URIs.
+ * @param previewVideo The URI of the video currently being previewed.
+ * @param previewImage The URI of the image currently being previewed.
+ * @param isPreviewingFromCarousel Whether the current preview originated from the carousel.
+ * @param config The current configuration for the media camera.
+ * @param longPressingToRecord Whether the user is currently long-pressing the shutter button to record video.
+ * @param zoomRatio The current camera zoom ratio.
+ */
 data class UiState(
     val mode: CameraMode = CameraMode.Photo,
     val recording: Boolean = false,
@@ -57,32 +75,50 @@ data class UiState(
     val previewImage: Uri? = null,
     val isPreviewingFromCarousel: Boolean = false,
     val config: MediaCameraConfig = MediaCameraConfig(),
-    val longPressingToRecord: Boolean = false, // Solo true cuando ya pasó el tiempo mínimo
-    val zoomRatio: Float = 1f // Nivel de zoom actual
+    val longPressingToRecord: Boolean = false,
+    val zoomRatio: Float = 1f
 )
 
+/**
+ * ViewModel for the [MediaCameraScreen], handling all business logic, state management,
+ * and interactions with the camera and media services.
+ *
+ * @param app The application context.
+ */
 class MediaCameraViewModel(private val app: Context) : ViewModel() {
-    fun setConfig(config: MediaCameraConfig) {
-        _ui.update { it.copy(config = config) }
-    }
     private val _ui = MutableStateFlow(UiState())
+    /**
+     * The state flow of the UI state.
+     */
     val ui: StateFlow<UiState> = _ui
 
     private var recording: Recording? = null
     private var tickJob: Job? = null
     private val selectedSet = LinkedHashSet<Uri>()
     private val tempUris = mutableSetOf<Uri>()
-    private var cancelingRecording = false // Flag para evitar preview cuando se cancela
+    private var cancelingRecording = false
 
+    /**
+     * Sets the configuration for the media camera.
+     *
+     * @param config The new configuration.
+     */
+    fun setConfig(config: MediaCameraConfig) {
+        _ui.update { it.copy(config = config) }
+    }
+
+    /**
+     * Sets the camera mode (Photo or Video).
+     *
+     * @param m The new camera mode.
+     */
     fun setMode(m: CameraMode) {
-        // Detener grabación si está activa
         if (_ui.value.recording) {
-            cancelingRecording = true // Marcar que estamos cancelando
+            cancelingRecording = true
             recording?.stop()
             recording = null
             stopTimer()
         }
-        // Limpiar previews y resetear todo como si nunca hubiera empezado
         _ui.value.previewVideo?.let { deleteTempFile(it) }
         _ui.value.previewImage?.let { deleteTempFile(it) }
         setLongPressingToRecord(false)
@@ -97,6 +133,9 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
         ) }
     }
 
+    /**
+     * Starts a timer to track video recording duration.
+     */
     private fun startTimer() {
         tickJob?.cancel()
         tickJob = viewModelScope.launch {
@@ -107,17 +146,43 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
             }
         }
     }
+
+    /**
+     * Stops the recording timer.
+     */
     private fun stopTimer() { tickJob?.cancel(); _ui.update { it.copy(recSeconds = 0) } }
+
+    /**
+     * Checks if video recording is currently in progress.
+     *
+     * @return True if recording, false otherwise.
+     */
     fun isRecording() = recording != null
 
-
+    /**
+     * Loads a limited number of media thumbnails for the carousel.
+     *
+     * @param limit The maximum number of thumbnails to load.
+     */
     fun loadThumbs(limit: Int = 12) = viewModelScope.launch(Dispatchers.IO) {
         _ui.update { it.copy(thumbs = queryMedia(limit)) }
     }
+
+    /**
+     * Loads a larger number of media items for the main gallery view.
+     *
+     * @param max The maximum number of media items to load.
+     */
     fun loadGallery(max: Int = 300) = viewModelScope.launch(Dispatchers.IO) {
         _ui.update { it.copy(gallery = queryMedia(max)) }
     }
 
+    /**
+     * Queries the [MediaStore] for images and videos.
+     *
+     * @param limit The maximum number of items to query.
+     * @return A list of [Thumb] objects.
+     */
     private fun queryMedia(limit: Int): List<Thumb> {
         val cr = app.contentResolver
         val config = _ui.value.config
@@ -153,19 +218,41 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
         return results.sortedByDescending { it.first }.map { it.second }.take(limit)
     }
 
+    /**
+     * Toggles the flash mode for image capture.
+     *
+     * @param controller The camera controller.
+     */
     fun toggleFlash(controller: LifecycleCameraController) {
         val next = if (_ui.value.flashMode == ImageCapture.FLASH_MODE_ON) ImageCapture.FLASH_MODE_OFF else ImageCapture.FLASH_MODE_ON
         controller.imageCaptureFlashMode = next
         _ui.update { it.copy(flashMode = next) }
     }
+
+    /**
+     * Toggles the torch (flashlight) for video recording.
+     *
+     * @param controller The camera controller.
+     */
     fun toggleTorch(controller: LifecycleCameraController) {
         val on = !_ui.value.torchOn; controller.enableTorch(on); _ui.update{ it.copy(torchOn=on) }
     }
+
+    /**
+     * Switches between the front and back cameras.
+     *
+     * @param controller The camera controller.
+     */
     fun switchCamera(controller: LifecycleCameraController) {
         val back = controller.cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
         controller.cameraSelector = if (back) CameraSelector.DEFAULT_BACK_CAMERA else CameraSelector.DEFAULT_FRONT_CAMERA
     }
 
+    /**
+     * Toggles the selection state of a media item.
+     *
+     * @param uri The URI of the media item.
+     */
     fun toggleSelect(uri: Uri) {
         val config = _ui.value.config
         if (uri in selectedSet) {
@@ -176,10 +263,21 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
         _ui.update { it.copy(selected = selectedSet.toList()) }
     }
 
+    /**
+     * Checks if more items can be selected based on the `maxSelection` config.
+     *
+     * @return True if more items can be selected, false otherwise.
+     */
     fun canSelectMore(): Boolean {
         return selectedSet.size < _ui.value.config.maxSelection
     }
 
+    /**
+     * Initiates a preview of a media item from the carousel.
+     *
+     * @param uri The URI of the media item.
+     * @param isVideo Whether the media item is a video.
+     */
     fun previewFromCarousel(uri: Uri, isVideo: Boolean) {
         if (isVideo) {
             _ui.update { it.copy(previewVideo = uri, isPreviewingFromCarousel = true) }
@@ -188,22 +286,48 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
         }
     }
 
+    /**
+     * Checks if there are any selected items.
+     *
+     * @return True if items are selected, false otherwise.
+     */
     fun hasSelectedItems(): Boolean = selectedSet.isNotEmpty()
 
+    /**
+     * Updates the state to reflect that the user is long-pressing to record.
+     *
+     * @param longPressing True if the user is long-pressing, false otherwise.
+     */
     fun setLongPressingToRecord(longPressing: Boolean) {
         _ui.update { it.copy(longPressingToRecord = longPressing) }
     }
 
+    /**
+     * Updates the camera zoom ratio.
+     *
+     * @param zoomRatio The new zoom ratio.
+     * @param controller The camera controller.
+     */
     fun updateZoom(zoomRatio: Float, controller: LifecycleCameraController) {
-        val clampedZoom = zoomRatio.coerceIn(1f, 10f) // Zoom entre 1x y 10x
+        val clampedZoom = zoomRatio.coerceIn(1f, 10f)
         controller.setZoomRatio(clampedZoom)
         _ui.update { it.copy(zoomRatio = clampedZoom) }
     }
+
+    /**
+     * Clears the current selection of media items.
+     */
     fun clearSelection() {
         selectedSet.clear()
         _ui.update { it.copy(selected = emptyList()) }
     }
 
+    /**
+     * Captures a photo and saves it to a temporary file.
+     *
+     * @param controller The camera controller.
+     * @param executor The executor to use for the capture callback.
+     */
     fun capturePhoto(controller: LifecycleCameraController, executor: Executor) {
         val tempFile = File(app.cacheDir, "PHOTO_${System.currentTimeMillis()}.jpg")
         val opts = ImageCapture.OutputFileOptions.Builder(tempFile).build()
@@ -220,6 +344,13 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
         })
     }
 
+    /**
+     * Starts recording a video to a temporary file.
+     *
+     * @param controller The camera controller.
+     * @param executor The executor to use for the recording events.
+     * @param withAudio Whether to record audio.
+     */
     @SuppressLint("MissingPermission")
     fun startRecording(controller: LifecycleCameraController, executor: Executor, withAudio: Boolean) {
         if (recording != null) return
@@ -239,49 +370,64 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
                         Log.e("MediaCamera", "Video capture error: ${e.error}")
                         deleteTempFile(tempUri)
                     } else if (!cancelingRecording) {
-                        // Solo mostrar preview si no estamos cancelando
                         _ui.update { it.copy(previewVideo = tempUri) }
                     } else {
-                        // Si estamos cancelando, eliminar archivo temporal
                         deleteTempFile(tempUri)
                     }
                     _ui.update { it.copy(recording = false) }
                     recording = null
-                    cancelingRecording = false // Reset flag
+                    cancelingRecording = false
                 }
             }
         }
     }
+
+    /**
+     * Stops the current video recording.
+     */
     fun stopRecording() {
-        // Este es el stop normal, no cancelación
         cancelingRecording = false
         recording?.stop()
         recording = null
     }
 
+    /**
+     * Dismisses the image preview.
+     */
     fun dismissImagePreview() {
         val ui = _ui.value
-        // Solo eliminar archivo temporal si no es del carrusel
         if (!ui.isPreviewingFromCarousel) {
             ui.previewImage?.let { deleteTempFile(it) }
         }
         _ui.update { it.copy(previewImage = null, isPreviewingFromCarousel = false) }
     }
 
+    /**
+     * Dismisses the video preview.
+     */
     fun dismissVideoPreview() {
         val ui = _ui.value
-        // Solo eliminar archivo temporal si no es del carrusel
         if (!ui.isPreviewingFromCarousel) {
             ui.previewVideo?.let { deleteTempFile(it) }
         }
         _ui.update { it.copy(previewVideo = null, isPreviewingFromCarousel = false) }
     }
 
+    /**
+     * Deletes a temporary file.
+     */
     private fun deleteTempFile(uri: Uri) {
         runCatching { File(uri.path ?: return@runCatching).delete() }
         tempUris.remove(uri)
     }
 
+    /**
+     * Saves a temporary file to the MediaStore.
+     *
+     * @param tempFileUri The URI of the temporary file.
+     * @param isVideo Whether the file is a video.
+     * @return The URI of the new file in the MediaStore, or null on failure.
+     */
     suspend fun saveToMediaStore(tempFileUri: Uri, isVideo: Boolean): Uri? = withContext(Dispatchers.IO) {
         val resolver = app.contentResolver
         val mediaStoreUri = if (isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
@@ -321,6 +467,14 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
         }
     }
 
+    /**
+     * Quickly trims a video without re-encoding.
+     *
+     * @param src The source video URI.
+     * @param startUs The start time in microseconds.
+     * @param endUs The end time in microseconds.
+     * @param onDone Callback with the URI of the trimmed video, or null on failure.
+     */
     @OptIn(UnstableApi::class)
     @SuppressLint("WrongConstant")
     fun fastTrim(src: Uri, startUs: Long, endUs: Long, onDone: (Uri?) -> Unit) =
@@ -349,7 +503,6 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
                 var maxInput = 256 * 1024
                 val tracks = extractor.trackCount
 
-                // seleccionar pistas válidas
                 for (i in 0 until tracks) {
                     val fmt = extractor.getTrackFormat(i)
                     val mime = fmt.getString(MediaFormat.KEY_MIME) ?: continue
@@ -419,18 +572,23 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
             }
         }
 
-
-
-
-
+    /**
+     * Processes a captured image, either saving it to the MediaStore or providing the temporary URI.
+     *
+     * @param tempUri The URI of the temporary image file.
+     * @param onDone Callback with the final URI of the image.
+     */
     fun saveImageAndSend(tempUri: Uri, onDone: (Uri?) -> Unit) {
         val config = _ui.value.config
 
         if (!config.saveToMediaStore) {
-            // No guardar en MediaStore, usar URI temporal/original
+            // Don't save to MediaStore, use temporary/original URI.
+            // The file is removed from the cleanup list so it's not deleted on close.
+            // The library user is responsible for managing this file.
+            tempUris.remove(tempUri)
             onDone(tempUri)
         } else {
-            // Guardar copia en MediaStore
+            // Save a copy to MediaStore
             viewModelScope.launch(Dispatchers.IO) {
                 val permanentUri = saveToMediaStore(tempUri, isVideo = false)
                 withContext(Dispatchers.Main) {
@@ -440,34 +598,39 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
         }
     }
 
+    /**
+     * Processes a captured or selected video, trimming it if necessary, and then either
+     * saving it to the MediaStore or providing the temporary URI.
+     *
+     * @param src The source URI of the video.
+     * @param startUs The start time for trimming in microseconds.
+     * @param endUs The end time for trimming in microseconds.
+     * @param onDone Callback with the final URI of the video.
+     */
     fun trimVideoAndSave(src: Uri, startUs: Long, endUs: Long, onDone: (Uri?) -> Unit) {
         val config = _ui.value.config
         val isFromCarousel = _ui.value.isPreviewingFromCarousel
 
         if (!config.saveToMediaStore) {
-            // No guardar en MediaStore
             if (isFromCarousel) {
-                // Del carrusel: verificar si necesita recorte
                 val videoDurationMs = getVideoDuration(src)
                 val isFullVideo = startUs == 0L && endUs >= (videoDurationMs * 1000)
 
                 if (isFullVideo) {
-                    // Video completo del carrusel, usar URI original
                     onDone(src)
                 } else {
-                    // Necesita recorte, generar archivo temporal
                     fastTrim(src, startUs, endUs) { tempUri ->
-                        onDone(tempUri) // Devolver URI temporal sin guardar en MediaStore
+                        tempUri?.let { tempUris.remove(it) }
+                        onDone(tempUri)
                     }
                 }
             } else {
-                // Video recién grabado: procesar pero no guardar en MediaStore
                 fastTrim(src, startUs, endUs) { tempUri ->
-                    onDone(tempUri) // Devolver URI temporal sin guardar en MediaStore
+                    tempUri?.let { tempUris.remove(it) }
+                    onDone(tempUri)
                 }
             }
         } else {
-            // Guardar en MediaStore
             fastTrim(src, startUs, endUs) { tempUri ->
                 if (tempUri != null) {
                     viewModelScope.launch(Dispatchers.IO) {
@@ -483,13 +646,19 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
         }
     }
 
+    /**
+     * Gets the duration of a video from its URI.
+     *
+     * @param uri The URI of the video.
+     * @return The duration in milliseconds.
+     */
     private fun getVideoDuration(uri: Uri): Long {
         return try {
             val extractor = MediaExtractor()
             val pfd = app.contentResolver.openFileDescriptor(uri, "r")
             if (pfd != null) {
                 extractor.setDataSource(pfd.fileDescriptor)
-                val duration = extractor.cachedDuration / 1000 // convertir a ms
+                val duration = extractor.cachedDuration / 1000
                 pfd.close()
                 extractor.release()
                 duration
@@ -500,7 +669,9 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
         }
     }
 
-    /** Llamar al destruir la pantalla/dialog. */
+    /**
+     * Cleans up all temporary files and resets the state when the camera screen is disposed.
+     */
     fun cleanupOnDispose() {
         runCatching { stopRecording() }
         selectedSet.clear()
@@ -518,6 +689,11 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
     }
 }
 
+/**
+ * Factory for creating [MediaCameraViewModel] instances.
+ *
+ * @param app The application context.
+ */
 class MediaCameraViewModelFactory(private val app: Context) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(MediaCameraViewModel::class.java)) {

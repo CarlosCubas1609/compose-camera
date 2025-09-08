@@ -2,7 +2,6 @@ package com.ccubas.composecamera
 
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -26,12 +25,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.ccubas.camera.MediaCameraScreen
-import com.ccubas.camera.components.MediaCameraPermissionsGate
 import com.ccubas.camera.rememberMediaCameraLauncher
 import com.ccubas.composecamera.models.MediaCameraConfig
 import com.ccubas.composecamera.ui.theme.ComposeCameraTheme
 
+/**
+ * The main activity for the sample application.
+ */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,12 +48,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * The main content of the sample application.
+ * It displays a button to open the camera and shows the captured media.
+ */
 @Composable
 fun MainContent() {
     var capturedMedia by rememberSaveable { mutableStateOf<List<Uri>?>(null) }
     val picker = rememberMediaCameraLauncher(
         config = MediaCameraConfig(
-            saveToMediaStore = true,
+            saveToMediaStore = false,
         )
     )
     Column(

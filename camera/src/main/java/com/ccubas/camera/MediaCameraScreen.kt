@@ -55,7 +55,14 @@ import kotlinx.coroutines.delay
 import kotlin.math.max
 import kotlin.math.min
 
-// ===================== SCREEN (multi-selección + carrusel) =====================
+/**
+ * The main screen for the media camera, providing a camera preview, capture controls,
+ * and access to the media gallery.
+ *
+ * @param onDone Callback invoked when the user confirms the selection of media, returning a list of URIs.
+ * @param onClose Callback invoked when the user closes the camera screen.
+ * @param config The configuration for the media camera.
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class,
     ExperimentalLayoutApi::class
 )
@@ -69,7 +76,7 @@ fun MediaCameraScreen(
     val vm: MediaCameraViewModel = viewModel(
         factory = MediaCameraViewModelFactory(ctx.applicationContext)
     )
-    // Configurar el ViewModel al inicio
+    // Configure the ViewModel at the beginning
     LaunchedEffect(config) {
         vm.setConfig(config)
     }
@@ -79,12 +86,12 @@ fun MediaCameraScreen(
 
     LaunchedEffect(Unit) { vm.loadThumbs() }
 
-    // Configurar modo inicial según configuración
+    // Set initial mode based on configuration
     LaunchedEffect(config.mediaType) {
         when (config.mediaType) {
             MediaType.PHOTO_ONLY -> vm.setMode(CameraMode.Photo)
             MediaType.VIDEO_ONLY -> vm.setMode(CameraMode.Video)
-            MediaType.BOTH -> { /* mantener modo actual */ }
+            MediaType.BOTH -> { /* keep current mode */ }
         }
     }
 
@@ -122,26 +129,26 @@ fun MediaCameraScreen(
     // --- helpers ---
     fun formatTimer(s: Int): String = "%02d:%02d".format(s / 60, s % 60)
 
-    // --- Disparador ---
+    // --- Shutter ---
     val shutterModifier =
         Modifier.pointerInput(ui.mode, longPressMs, hasAudio, ui.config.mediaType) {
             awaitEachGesture {
                 awaitFirstDown()
-                // No marcar nada al inicio, solo después del longpress
+                // Don't mark anything at the beginning, only after long press
 
                 if (ui.mode == CameraMode.Photo) {
-                    // Si es PHOTO_ONLY, solo permitir fotos (no longpress para video)
+                    // If PHOTO_ONLY, only allow photos (no long press for video)
                     if (ui.config.mediaType == MediaType.PHOTO_ONLY) {
                         waitForUpOrCancellation()?.let {
                             vm.capturePhoto(controller, exec)
                         }
                     } else {
-                        // Comportamiento normal: tap = foto, longpress = video
+                        // Normal behavior: tap = photo, long press = video
                         val up = withTimeoutOrNull(longPressMs) { waitForUpOrCancellation() }
                         if (up != null) {
                             vm.capturePhoto(controller, exec)
                         } else {
-                            // Después de 250ms -> activar diseño WhatsApp y zoom con gestos
+                            // After 250ms -> activate WhatsApp design and zoom with gestures
                             vm.setLongPressingToRecord(true)
                             vm.startRecording(controller, exec, hasAudio)
 
@@ -149,28 +156,28 @@ fun MediaCameraScreen(
                             var initialZoom = ui.zoomRatio
                             var hasStartedDrag = false
 
-                            // Capturar posición inicial
+                            // Capture initial position
                             val initialEvent = awaitPointerEvent()
                             if (initialEvent.changes.isNotEmpty()) {
                                 initialY = initialEvent.changes[0].position.y
                                 initialZoom = ui.zoomRatio
                             }
 
-                            // Detectar gestos de zoom durante grabación
+                            // Detect zoom gestures during recording
                             while (true) {
                                 val event = awaitPointerEvent()
                                 if (event.changes.all { !it.pressed }) break
 
-                                // Detectar movimiento vertical para zoom
+                                // Detect vertical movement for zoom
                                 val currentChange = event.changes.firstOrNull()
                                 if (currentChange != null && currentChange.pressed) {
                                     val currentY = currentChange.position.y
-                                    val deltaY = initialY - currentY // Invertido: arriba = positivo
+                                    val deltaY = initialY - currentY // Inverted: up = positive
 
-                                    // Solo aplicar zoom si hay movimiento significativo
+                                    // Only apply zoom if there is significant movement
                                     if (kotlin.math.abs(deltaY) > 20f) {
                                         hasStartedDrag = true
-                                        // Sensibilidad del zoom: cada 100px = 1x zoom
+                                        // Zoom sensitivity: every 100px = 1x zoom
                                         val zoomDelta = deltaY / 100f
                                         val newZoom = (initialZoom + zoomDelta).coerceIn(1f, 10f)
                                         vm.updateZoom(newZoom, controller)
@@ -183,7 +190,7 @@ fun MediaCameraScreen(
                         }
                     }
                 } else {
-                    // Modo Video
+                    // Video Mode
                     waitForUpOrCancellation()?.let {
                         if (vm.isRecording()) vm.stopRecording()
                         else vm.startRecording(controller, exec, hasAudio)
@@ -207,7 +214,7 @@ fun MediaCameraScreen(
         )
 
 
-        // TOP: cerrar / flash y, si graba, timer al centro
+        // TOP: close / flash and, if recording, timer at the center
         Box(
             modifier = Modifier.fillMaxWidth()
                 .padding(8.dp)
@@ -240,7 +247,7 @@ fun MediaCameraScreen(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
         ) {
-            // Carrusel arriba: solo en modo Foto y ocultar cuando se mantiene longpress
+            // Carousel at the top: only in Photo mode and hide when long-pressing
             if (ui.mode == CameraMode.Photo && !ui.longPressingToRecord) {
                 val swipeUpToSheet = remember { 60f }
                 LazyRow(
@@ -266,12 +273,12 @@ fun MediaCameraScreen(
                                 .combinedClickable(
                                     onClick = {
                                         if (vm.hasSelectedItems()) {
-                                            // Si ya hay elementos seleccionados y se puede seleccionar más
+                                            // If there are already selected items and more can be selected
                                             if (selected || vm.canSelectMore()) {
                                                 vm.toggleSelect(t.uri)
                                             }
                                         } else {
-                                            // Si no hay elementos seleccionados, previsualizar
+                                            // If no items are selected, preview
                                             vm.previewFromCarousel(t.uri, t.isVideo)
                                         }
                                     },
@@ -302,48 +309,48 @@ fun MediaCameraScreen(
                 }
             }
 
-            // Controles: galería / disparador / switch
+            // Controls: gallery / shutter / switch
             Box(Modifier.fillMaxWidth().height(96.dp).padding(horizontal = 18.dp)) {
-                // Botón galería: ocultar cuando se mantiene longpress
+                // Gallery button: hide when long-pressing
                 if (!ui.longPressingToRecord) {
                     IconButton(onClick = { showGallery = true }, modifier = Modifier.align(Alignment.CenterStart)) {
                         Icon(Icons.Outlined.Collections, null, tint = Color.White)
                     }
                 }
 
-                // Botón disparador con diseño WhatsApp cuando longpress
+                // Shutter button with WhatsApp design on long press
                 Box(
                     Modifier
-                        .size(if (ui.longPressingToRecord) 96.dp else 84.dp) // Botón más grande durante longpress
+                        .size(if (ui.longPressingToRecord) 96.dp else 84.dp) // Larger button during long press
                         .clip(CircleShape)
                         .background(
-                            if (ui.longPressingToRecord || ui.recording) Color.Transparent // Sin fondo cuando graba
-                            else Color.White.copy(alpha = .15f) // Fondo blanco normal
+                            if (ui.longPressingToRecord || ui.recording) Color.Transparent // No background when recording
+                            else Color.White.copy(alpha = .15f) // Normal white background
                         )
                         .align(Alignment.Center)
                         .then(shutterModifier),
                     contentAlignment = Alignment.Center
                 ) {
                     if (ui.longPressingToRecord) {
-                        // Diseño longpress en modo foto como foto_1: aro blanco + fondo negro + punto rojo
+                        // Long press design in photo mode: white ring + black background + red dot
                         Box(
                             Modifier
-                                .size(96.dp) // Botón más grande
+                                .size(96.dp) // Larger button
                                 .clip(CircleShape)
-                                .background(Color.White) // Aro blanco exterior
-                                .padding(6.dp), // Grosor del aro blanco
+                                .background(Color.White) // Outer white ring
+                                .padding(6.dp), // Thickness of the white ring
                             contentAlignment = Alignment.Center
                         ) {
-                            // Fondo negro interior
+                            // Inner black background
                             Box(
                                 Modifier
                                     .fillMaxSize()
                                     .clip(CircleShape)
                                     .background(Color.Black.copy(alpha = 0.8f))
-                                    .padding(20.dp), // Más padding = punto rojo más pequeño
+                                    .padding(20.dp), // More padding = smaller red dot
                                 contentAlignment = Alignment.Center
                             ) {
-                                // Punto rojo pequeño en el centro
+                                // Small red dot in the center
                                 Box(
                                     Modifier
                                         .fillMaxSize()
@@ -353,39 +360,39 @@ fun MediaCameraScreen(
                             }
                         }
                     } else if (ui.recording) {
-                        // Diseño durante grabación como foto_2: círculo blanco + cuadrado rojo
+                        // Design during recording: white circle + red square
                         Box(
                             Modifier
                                 .size(84.dp)
                                 .clip(CircleShape)
-                                .background(Color.White) // Borde blanco
-                                .padding(6.dp), // Grosor del borde
+                                .background(Color.White) // White border
+                                .padding(6.dp), // Border thickness
                             contentAlignment = Alignment.Center
                         ) {
-                            // Fondo transparente/negro
+                            // Transparent/black background
                             Box(
                                 Modifier
                                     .fillMaxSize()
                                     .clip(CircleShape)
                                     .background(Color.Black.copy(alpha = 0.8f))
-                                    .padding(12.dp), // Espacio para el cuadrado
+                                    .padding(12.dp), // Space for the square
                                 contentAlignment = Alignment.Center
                             ) {
-                                // Cuadrado rojo interior
+                                // Inner red square
                                 Box(
                                     Modifier
                                         .fillMaxSize()
                                         .clip(
-                                            if (ui.mode == CameraMode.Video) RoundedCornerShape(4.dp) // Cuadrado redondeado
-                                            else CircleShape // Círculo para foto
+                                            if (ui.mode == CameraMode.Video) RoundedCornerShape(4.dp) // Rounded square
+                                            else CircleShape // Circle for photo
                                         )
                                         .background(Color.Red)
-                                        .padding(20.dp), // Más padding = cuadrado rojo más pequeño
+                                        .padding(20.dp), // More padding = smaller red square
                                 )
                             }
                         }
                     } else {
-                        // Diseño normal: botón blanco
+                        // Normal design: white button
                         Box(
                             Modifier
                                 .size(64.dp)
@@ -395,7 +402,7 @@ fun MediaCameraScreen(
                     }
                 }
 
-                // Botón cambiar cámara: ocultar cuando se mantiene longpress
+                // Switch camera button: hide when long-pressing
                 if (!ui.longPressingToRecord) {
                     IconButton(onClick = { vm.switchCamera(controller) }, modifier = Modifier.align(Alignment.CenterEnd)) {
                         Icon(Icons.Outlined.Cameraswitch, null, tint = Color.White)
@@ -403,7 +410,7 @@ fun MediaCameraScreen(
                 }
             }
 
-            // Modos (solo Video / Foto) - mostrar según configuración
+            // Modes (Video / Photo) - show based on configuration
             if (ui.config.mediaType == MediaType.BOTH) {
                 Row(
                     Modifier.align(Alignment.CenterHorizontally)
@@ -421,7 +428,7 @@ fun MediaCameraScreen(
                 }
             }
 
-            // Enviar selección opcional
+            // Optional send selection
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.End) {
                 Button(onClick = { sendUris(ui.selected) }, enabled = ui.selected.isNotEmpty()) {
@@ -431,14 +438,14 @@ fun MediaCameraScreen(
             }
         }
 
-        // BottomSheet galería (multi selección) — igual que tenías
+        // Gallery BottomSheet (multi-selection)
         if (showGallery) {
             ModalBottomSheet(
                 onDismissRequest = { showGallery = false },
                 contentWindowInsets = { WindowInsets.navigationBarsIgnoringVisibility }
             ) {
                 var tab by rememberSaveable { mutableIntStateOf(0) }
-                // Mostrar tabs según configuración
+                // Show tabs based on configuration
                 if (ui.config.mediaType == MediaType.BOTH) {
                     TabRow(selectedTabIndex = tab) {
                         Tab(tab == 0, { tab = 0 }) { Text("Todos", Modifier.padding(12.dp)) }
@@ -446,7 +453,7 @@ fun MediaCameraScreen(
                         Tab(tab == 2, { tab = 2 }) { Text("Videos", Modifier.padding(12.dp)) }
                     }
                 } else {
-                    // Si es solo foto o solo video, no mostrar tabs
+                    // If only photo or only video, don't show tabs
                     val title = when (ui.config.mediaType) {
                         MediaType.PHOTO_ONLY -> "Fotos"
                         MediaType.VIDEO_ONLY -> "Videos"
@@ -459,7 +466,7 @@ fun MediaCameraScreen(
                         Text(title, style = MaterialTheme.typography.titleMedium)
                     }
                 }
-                // Filtrar por configuración primero, luego por tab
+                // Filter by configuration first, then by tab
                 val configFilteredItems = when (ui.config.mediaType) {
                     MediaType.PHOTO_ONLY -> ui.gallery.filter { !it.isVideo }
                     MediaType.VIDEO_ONLY -> ui.gallery.filter { it.isVideo }
@@ -522,7 +529,7 @@ fun MediaCameraScreen(
             }
         }
 
-        // Preview de la foto recién tomada
+        // Preview of the recently taken photo
         ui.previewImage?.let { src ->
             ImageReviewWithCropOverlay(
                 src = src,
@@ -539,7 +546,7 @@ fun MediaCameraScreen(
             )
         }
 
-        // Preview + Recorte del video recién grabado/seleccionado
+        // Preview + Crop of the recently recorded/selected video
         ui.previewVideo?.let { src ->
             VideoReviewOverlay(
                 src = src,
@@ -557,7 +564,7 @@ fun MediaCameraScreen(
         }
     }
 
-    // Limpieza total al destruir el composable
+    // Total cleanup when destroying the composable
     DisposableEffect(Unit) {
         onDispose {
             performCleanup()
@@ -565,6 +572,14 @@ fun MediaCameraScreen(
     }
 }
 
+/**
+ * A private composable for reviewing and cropping a captured image.
+ *
+ * @param src The URI of the image to review.
+ * @param onClose Callback invoked when the user closes the review overlay.
+ * @param onUse Callback invoked when the user confirms using the (potentially cropped) image.
+ * @param aspect The fixed aspect ratio to use for cropping, or null for freeform.
+ */
 @Composable
 private fun ImageReviewWithCropOverlay(
     src: Uri,
@@ -581,7 +596,7 @@ private fun ImageReviewWithCropOverlay(
             .systemBarsPadding()
             .zIndex(1f)
     ) {
-        // Preview simple (sin recorte)
+        // Simple preview (without cropping)
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current).data(src).build(),
             contentDescription = null,
@@ -590,7 +605,7 @@ private fun ImageReviewWithCropOverlay(
             contentScale = ContentScale.Fit
         )
 
-        // Top: cerrar / recortar
+        // Top: close / crop
         Row(
             Modifier
                 .align(Alignment.TopStart)
@@ -606,7 +621,7 @@ private fun ImageReviewWithCropOverlay(
             }
         }
 
-        // Bottom: usar (original por defecto)
+        // Bottom: use (original by default)
         Row(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -620,7 +635,7 @@ private fun ImageReviewWithCropOverlay(
         }
     }
 
-    // Cropper modal a pantalla completa (bloqueado)
+    // Full-screen modal cropper (locked)
     if (showCropper) {
         CropperFullScreen(
             src = src,
@@ -631,6 +646,13 @@ private fun ImageReviewWithCropOverlay(
     }
 }
 
+/**
+ * A private composable for reviewing and trimming a captured video.
+ *
+ * @param src The URI of the video to review.
+ * @param onClose Callback invoked when the user closes the review overlay.
+ * @param onSaveTrim Callback invoked when the user confirms the trimmed video, providing start and end times in milliseconds.
+ */
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -668,7 +690,7 @@ private fun VideoReviewOverlay(
         exo.playWhenReady = !paused
     }
 
-    // Carga duración completa y deja el rango al 100% (por defecto video completo)
+    // Load full duration and set range to 100% (default full video)
     LaunchedEffect(src) {
         exo.setMediaItem(MediaItem.fromUri(src))
         exo.prepare()
@@ -679,7 +701,7 @@ private fun VideoReviewOverlay(
 
     LaunchedEffect(range) { if (durationMs > 0) applyClip() }
 
-    // loop dentro del rango
+    // loop within the range
     LaunchedEffect(range, paused) {
         if (paused) return@LaunchedEffect
         val s = (range.start * 1000).toLong()
@@ -693,8 +715,8 @@ private fun VideoReviewOverlay(
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Color.Black)     // <- opaco
-                .zIndex(1f)                  // <- por encima de la cámara
+                .background(Color.Black)     // <- opaque
+                .zIndex(1f)                  // <- above the camera
                 .systemBarsPadding()
         ) {
 

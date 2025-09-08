@@ -11,6 +11,14 @@ import androidx.compose.ui.zIndex
 import com.ccubas.camera.components.MediaCameraPermissionsGate
 import com.ccubas.composecamera.models.MediaCameraConfig
 
+/**
+ * A composable that displays the [MediaCameraScreen] within a [Surface].
+ * This is useful for embedding the camera screen directly into a layout.
+ *
+ * @param onResult Callback invoked when the user confirms the selection of media, returning a list of URIs.
+ * @param onDismiss Callback invoked when the camera should be dismissed.
+ * @param config The configuration for the media camera.
+ */
 @Composable
 fun MediaCameraSurface(
     onResult: (List<Uri>) -> Unit,

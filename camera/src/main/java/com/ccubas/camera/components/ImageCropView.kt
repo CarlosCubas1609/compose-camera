@@ -58,8 +58,18 @@ import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
+/**
+ * Represents the hit area on the crop rectangle's handles or body.
+ */
 enum class Hit { NONE, LT, RT, LB, RB, T, B, L, R, BODY }
 
+/**
+ * State holder for the [ImageCropper] composable, managing the image, crop rectangle, and user interactions.
+ *
+ * @param context The application context.
+ * @param imageUri The URI of the image to be cropped.
+ * @param startAspect The initial aspect ratio for the crop rectangle, if any.
+ */
 @Stable
 class CropperState(private val context: Context, private val imageUri: Uri, startAspect: Float? = null) {
     var scale by mutableFloatStateOf(1f)
@@ -69,12 +79,23 @@ class CropperState(private val context: Context, private val imageUri: Uri, star
     private var bmpW by mutableIntStateOf(0)
     private var bmpH by mutableIntStateOf(0)
 
+    /**
+     * The current cropping rectangle in the view's coordinates.
+     */
     var cropRect by mutableStateOf(UiRect(0f, 0f, 0f, 0f))
         internal set
 
+    /**
+     * The fixed aspect ratio for the crop rectangle. If null, the aspect ratio is free.
+     */
     var aspectRatio: Float? by mutableStateOf(startAspect)
 
-    // --- Decode reutilizable (orientado por EXIF; opcionalmente en SW) ---
+    /**
+     * Decodes the bitmap from the given [imageUri], correcting its orientation based on EXIF data.
+     *
+     * @param forceSoftware Whether to force software rendering for the bitmap.
+     * @return The decoded and oriented [Bitmap], or null if decoding fails.
+     */
     private fun decodeOrientedBitmap(forceSoftware: Boolean): Bitmap? = try {
         if (Build.VERSION.SDK_INT >= 28) {
             val src = ImageDecoder.createSource(context.contentResolver, imageUri)
@@ -100,10 +121,16 @@ class CropperState(private val context: Context, private val imageUri: Uri, star
         }
     } catch (_: Exception) { null }
 
+    /**
+     * The loaded bitmap, derived state from the [imageUri].
+     */
     val bitmap: Bitmap? by derivedStateOf {
         decodeOrientedBitmap(forceSoftware = false)
     }
 
+    /**
+     * Calculates the largest possible rectangle with a given aspect ratio that fits inside a bounding box.
+     */
     private fun maxRectInside(b: UiRect, ar: Float): UiRect {
         val bw = b.width; val bh = b.height
         val cx = (b.left + b.right) / 2f
@@ -112,23 +139,28 @@ class CropperState(private val context: Context, private val imageUri: Uri, star
         return UiRect(cx - w/2, cy - h/2, cx + w/2, cy + h/2)
     }
 
+    /**
+     * Callback to be invoked when the size of the [ImageCropper] composable changes.
+     *
+     * @param size The new size of the composable.
+     */
     fun onSizeChanged(size: IntSize) {
         viewSize = size
         bitmap?.let {
             bmpW = it.width; bmpH = it.height
-            // reset antes de calcular bounds
+            // reset before calculating bounds
             scale = 1f; offset = Offset.Zero
 
-            val b = contentBounds()                // toda la imagen visible
-            cropRect = aspectRatio?.let { ar ->    // si hay aspecto, máximo rect con ese AR
+            val b = contentBounds()                // full visible image
+            cropRect = aspectRatio?.let { ar ->    // if there's an aspect ratio, max rect with that AR
                 maxRectInside(b, ar)
             } ?: b
         }
     }
 
-    // --- en CropperState ---
-
-    // Rect visible del bitmap en coordenadas de la vista (incluye pan/zoom)
+    /**
+     * Calculates the visible bounds of the bitmap within the view, considering pan and zoom.
+     */
     private fun contentBounds(): UiRect {
         if (viewSize.width == 0 || viewSize.height == 0 || bmpW == 0 || bmpH == 0) {
             return UiRect(0f, 0f, 0f, 0f)
@@ -149,7 +181,9 @@ class CropperState(private val context: Context, private val imageUri: Uri, star
         return UiRect(x, y, x + w, y + h)
     }
 
-    // mover dentro de los límites de la imagen (no de la vista)
+    /**
+     * Moves the crop rectangle within the bounds of the displayed image.
+     */
     private fun moveWithin(r: UiRect, drag: Offset): UiRect {
         val b = contentBounds()
         var dx = drag.x
@@ -161,7 +195,15 @@ class CropperState(private val context: Context, private val imageUri: Uri, star
         return UiRect(r.left + dx, r.top + dy, r.right + dx, r.bottom + dy)
     }
 
-    // reemplaza COMPLETO tu resizeWithAspect por éste (clampa contra contentBounds)
+    /**
+     * Resizes the crop rectangle based on user drag gestures, optionally maintaining a fixed aspect ratio.
+     *
+     * @param r The current crop rectangle.
+     * @param hit The area of the rectangle that was hit (e.g., a corner or an edge).
+     * @param drag The drag offset.
+     * @param aspect The aspect ratio to maintain, or null for freeform resizing.
+     * @return The new, resized crop rectangle.
+     */
     fun resizeWithAspect(
         r: UiRect,
         hit: Hit,
@@ -192,18 +234,16 @@ class CropperState(private val context: Context, private val imageUri: Uri, star
             }
         }
 
-        // Con aspecto fijo
+        // With fixed aspect ratio
         val ar = aspect
         fun corner(anchorX: Float, anchorY: Float, moveLeft: Boolean, moveTop: Boolean, dx: Float, dy: Float): UiRect {
             val signX = if (moveLeft) -1f else 1f
             val signY = if (moveTop) -1f else 1f
 
-            // ancho/alto tentativos según arrastre
             var w = abs(if (moveLeft) (anchorX - (r.left + dx)) else ((r.right + dx) - anchorX))
             var h = abs(if (moveTop) (anchorY - (r.top + dy)) else ((r.bottom + dy) - anchorY))
             if (w / max(h, 1f) > ar) h = w / ar else w = h * ar
 
-            // máximos permitidos por los bordes de la imagen
             val maxW = if (signX < 0) (anchorX - b.left) else (b.right - anchorX)
             val maxH = if (signY < 0) (anchorY - b.top) else (b.bottom - anchorY)
 
@@ -265,6 +305,11 @@ class CropperState(private val context: Context, private val imageUri: Uri, star
         }
     }
 
+    /**
+     * Crops the image based on the current [cropRect], saves it to a temporary file, and returns its URI.
+     *
+     * @return The [Uri] of the cropped image file, or null if cropping fails.
+     */
     suspend fun crop(): Uri? = withContext(Dispatchers.IO) {
         val base = decodeOrientedBitmap(forceSoftware = true) ?: return@withContext null
         if (viewSize.width == 0 || viewSize.height == 0) return@withContext null
@@ -272,7 +317,7 @@ class CropperState(private val context: Context, private val imageUri: Uri, star
         val bmpW = base.width
         val bmpH = base.height
 
-        // 2) Mapeo view->bitmap con el tamaño ORIENTADO real
+        // Map view coordinates to bitmap coordinates
         val viewW = viewSize.width.toFloat()
         val viewH = viewSize.height.toFloat()
         val (visualW, visualH) =
@@ -290,7 +335,7 @@ class CropperState(private val context: Context, private val imageUri: Uri, star
         val r = ((cropRect.right  - finalX) / finalW) * bmpW
         val b = ((cropRect.bottom - finalY) / finalH) * bmpH
 
-        // 3) Clamp estricto y sub-recorte seguro (evita “Subset Rect … not contained …”)
+        // Clamp strictly and create sub-bitmap safely
         val left   = floor(l).toInt().coerceIn(0, bmpW - 1)
         val top    = floor(t).toInt().coerceIn(0, bmpH - 1)
         val right  = ceil(r).toInt().coerceIn(left + 1, bmpW)
@@ -303,19 +348,32 @@ class CropperState(private val context: Context, private val imageUri: Uri, star
         }
         base.recycle()
 
-        // 4) Guardar
+        // Save the cropped bitmap
         val out = File(context.cacheDir, "CROP_${System.currentTimeMillis()}.jpg")
         FileOutputStream(out).use { outBmp.compress(Bitmap.CompressFormat.JPEG, 92, it) }
         Uri.fromFile(out)
     }
 }
 
+/**
+ * Creates and remembers a [CropperState] for the [ImageCropper].
+ *
+ * @param imageUri The URI of the image to be cropped.
+ * @param aspectRatio The initial aspect ratio for the crop rectangle, if any.
+ * @return A remembered [CropperState] instance.
+ */
 @Composable
 fun rememberCropperState(imageUri: Uri, aspectRatio: Float? = null): CropperState {
     val ctx = LocalContext.current
     return remember(imageUri, ctx, aspectRatio) { CropperState(ctx, imageUri, aspectRatio) }
 }
 
+/**
+ * A composable that displays an image with a draggable and resizable crop overlay.
+ *
+ * @param state The [CropperState] that holds the state of the cropper.
+ * @param modifier The modifier to be applied to the composable.
+ */
 @Composable
 fun ImageCropper(
     state: CropperState,
@@ -385,6 +443,14 @@ fun ImageCropper(
     }
 }
 
+/**
+ * A full-screen composable for cropping an image.
+ *
+ * @param src The URI of the source image to crop.
+ * @param onCancel Callback invoked when the user cancels the crop operation.
+ * @param onCropped Callback invoked with the URI of the cropped image when the user confirms.
+ * @param aspect The fixed aspect ratio to use for cropping, or null for freeform.
+ */
 @Composable
 fun CropperFullScreen(
     src: Uri,
@@ -394,7 +460,7 @@ fun CropperFullScreen(
 ) {
     val scope = rememberCoroutineScope()
     val state = rememberCropperState(imageUri = src, aspectRatio = aspect)
-    BackHandler(enabled = true) { /* bloquea back */ }
+    BackHandler(enabled = true) { /* block back press */ }
 
     Box(
         Modifier
@@ -416,7 +482,7 @@ fun CropperFullScreen(
             }
         }
 
-        // Botón usar
+        // "Use" button
         Row(
             Modifier
                 .align(Alignment.BottomEnd)
@@ -434,6 +500,11 @@ fun CropperFullScreen(
 }
 
 
+/**
+ * A private composable that handles drag gestures for resizing the crop rectangle.
+ *
+ * @param state The [CropperState] that holds the crop rectangle state.
+ */
 @Composable
 private fun CropGestureLayer(state: CropperState) {
     val padPx = with(LocalDensity.current) { 24.dp.toPx() }
@@ -457,6 +528,14 @@ private fun CropGestureLayer(state: CropperState) {
     )
 }
 
+/**
+ * A private helper function to determine which part of the crop rectangle was touched.
+ *
+ * @param r The crop rectangle.
+ * @param p The position of the touch event.
+ * @param pad The touch padding around the handles.
+ * @return The [Hit] value representing the touched area.
+ */
 private fun hitTest(r: UiRect, p: Offset, pad: Float): Hit {
     fun near(x: Float, y: Float) = abs(p.x - x) <= pad && abs(p.y - y) <= pad
     return when {

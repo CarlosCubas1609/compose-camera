@@ -16,7 +16,10 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
 
-// ====== Window helpers (status/nav transparent + edge-to-edge) ======
+/**
+ * Configures the window of a dialog to be edge-to-edge, allowing content to draw behind the system bars.
+ * This is a private helper composable.
+ */
 @Composable
 private fun ConfigureEdgeToEdgeForDialog() {
     val view = LocalView.current
@@ -27,24 +30,30 @@ private fun ConfigureEdgeToEdgeForDialog() {
     DisposableEffect(Unit) {
         val actWindow = activity?.window
 
-        // Activity edge-to-edge (para que el Dialog respete barras)
+        // Configure the activity window for edge-to-edge
         actWindow?.let { w ->
             WindowCompat.setDecorFitsSystemWindows(w, false)
             w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
         }
 
-        // Dialog edge-to-edge
+        // Configure the dialog window for edge-to-edge
         dialogWindow?.let { w ->
             WindowCompat.setDecorFitsSystemWindows(w, false)
             w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
         }
 
         onDispose {
-
+            // Cleanup if needed
         }
     }
 }
 
+/**
+ * A scaffold for dialogs that sets up an edge-to-edge black background,
+ * providing insets for the system bars.
+ *
+ * @param content The content to be displayed inside the scaffold.
+ */
 @Composable
 fun DialogScaffold(content: @Composable () -> Unit) {
     ConfigureEdgeToEdgeForDialog()

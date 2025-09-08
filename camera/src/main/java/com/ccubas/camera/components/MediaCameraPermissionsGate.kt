@@ -30,7 +30,13 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.ccubas.camera.utils.MediaPerms
 
-// ===================== PERMISOS (todos) =====================
+/**
+ * A composable that handles the logic for requesting necessary media permissions.
+ * It displays a permission request UI if permissions are not granted, and the provided
+ * [content] if they are.
+ *
+ * @param content The composable content to display when all required permissions are granted.
+ */
 @Composable
 fun MediaCameraPermissionsGate(
     content: @Composable () -> Unit
@@ -84,6 +90,11 @@ fun MediaCameraPermissionsGate(
     }
 }
 
+/**
+ * Extension function to find the underlying [Activity] from a [Context].
+ *
+ * @return The [Activity] if found, otherwise null.
+ */
 tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
