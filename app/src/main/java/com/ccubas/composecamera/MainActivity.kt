@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.ccubas.camera.MediaCameraScreen
 import com.ccubas.camera.components.MediaCameraPermissionsGate
+import com.ccubas.camera.rememberMediaCameraLauncher
+import com.ccubas.composecamera.models.MediaCameraConfig
 import com.ccubas.composecamera.ui.theme.ComposeCameraTheme
 
 class MainActivity : ComponentActivity() {
@@ -36,30 +38,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             ComposeCameraTheme {
-                var showCamera by rememberSaveable { mutableStateOf(false) }
-                var capturedMedia by rememberSaveable { mutableStateOf<List<Uri>?>(null) }
-
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
-                        if (showCamera) {
-                            MediaCameraPermissionsGate(
-                                content = {
-                                    MediaCameraScreen(
-                                        onDone = { uris ->
-                                            showCamera = false
-                                            capturedMedia = uris
-                                            Log.d("MainActivity", "Media captured: $uris")
-                                        },
-                                        onClose = { showCamera = false }
-                                    )
-                                }
-                            )
-                        } else {
-                            MainContent(
-                                capturedMedia = capturedMedia,
-                                onOpenCamera = { showCamera = true }
-                            )
-                        }
+                        MainContent()
                     }
                 }
             }
@@ -68,7 +49,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainContent(capturedMedia: List<Uri>?, onOpenCamera: () -> Unit) {
+fun MainContent() {
+    var capturedMedia by rememberSaveable { mutableStateOf<List<Uri>?>(null) }
+    val picker = rememberMediaCameraLauncher(
+        config = MediaCameraConfig(
+            maxSelection = 1,
+        )
+    )
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -81,7 +68,7 @@ fun MainContent(capturedMedia: List<Uri>?, onOpenCamera: () -> Unit) {
             LazyColumn(modifier = Modifier
                 .weight(1f)
                 .padding(vertical = 16.dp)) {
-                items(capturedMedia) { uri ->
+                items(capturedMedia ?: listOf()) { uri ->
                     Column(modifier = Modifier.padding(8.dp)) {
                         AsyncImage(model = uri, contentDescription = null)
                         Text(uri.toString(), style = MaterialTheme.typography.labelSmall)
@@ -90,7 +77,9 @@ fun MainContent(capturedMedia: List<Uri>?, onOpenCamera: () -> Unit) {
             }
         }
 
-        Button(onClick = onOpenCamera, modifier = Modifier.padding(16.dp)) {
+        Button(onClick = { picker.launch { uris ->
+            capturedMedia = uris
+        } }, modifier = Modifier.padding(16.dp)) {
             Text("Abrir Cámara")
         }
     }
