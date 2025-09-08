@@ -1,4 +1,4 @@
-package com.ccubas.camera.components
+package com.ccubas.camera
 
 import android.net.Uri
 import androidx.compose.foundation.layout.Box
@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.zIndex
+import com.ccubas.camera.components.MediaCameraPermissionsGate
 import com.ccubas.composecamera.models.MediaCameraConfig
 
 @Composable
