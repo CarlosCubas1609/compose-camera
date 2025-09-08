@@ -15,6 +15,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -24,6 +25,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.*
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -273,12 +276,8 @@ fun MediaCameraScreen(
                                 .combinedClickable(
                                     onClick = {
                                         if (vm.hasSelectedItems()) {
-                                            // If there are already selected items and more can be selected
-                                            if (selected || vm.canSelectMore()) {
-                                                vm.toggleSelect(t.uri)
-                                            }
+                                            vm.toggleSelect(t.uri)
                                         } else {
-                                            // If no items are selected, preview
                                             vm.previewFromCarousel(t.uri, t.isVideo)
                                         }
                                     },
@@ -440,90 +439,126 @@ fun MediaCameraScreen(
 
         // Gallery BottomSheet (multi-selection)
         if (showGallery) {
+            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            var galleryFilter by remember { mutableStateOf("Recientes") }
+
             ModalBottomSheet(
-                onDismissRequest = { showGallery = false },
+                onDismissRequest = { vm.clearSelection(); showGallery = false },
+                sheetState = sheetState,
+                modifier = Modifier.fillMaxSize(),
                 contentWindowInsets = { WindowInsets.navigationBarsIgnoringVisibility }
             ) {
-                var tab by rememberSaveable { mutableIntStateOf(0) }
-                // Show tabs based on configuration
-                if (ui.config.mediaType == MediaType.BOTH) {
-                    TabRow(selectedTabIndex = tab) {
-                        Tab(tab == 0, { tab = 0 }) { Text("Todos", Modifier.padding(12.dp)) }
-                        Tab(tab == 1, { tab = 1 }) { Text("Fotos", Modifier.padding(12.dp)) }
-                        Tab(tab == 2, { tab = 2 }) { Text("Videos", Modifier.padding(12.dp)) }
-                    }
-                } else {
-                    // If only photo or only video, don't show tabs
-                    val title = when (ui.config.mediaType) {
-                        MediaType.PHOTO_ONLY -> "Fotos"
-                        MediaType.VIDEO_ONLY -> "Videos"
-                        else -> "Media"
-                    }
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(title, style = MaterialTheme.typography.titleMedium)
-                    }
-                }
-                // Filter by configuration first, then by tab
-                val configFilteredItems = when (ui.config.mediaType) {
-                    MediaType.PHOTO_ONLY -> ui.gallery.filter { !it.isVideo }
-                    MediaType.VIDEO_ONLY -> ui.gallery.filter { it.isVideo }
-                    MediaType.BOTH -> ui.gallery
-                }
-                val gridItems = when (tab) {
-                    1 -> configFilteredItems.filter { !it.isVideo }
-                    2 -> configFilteredItems.filter { it.isVideo }
-                    else -> configFilteredItems
-                }
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(4),
-                    modifier = Modifier.fillMaxHeight(0.6f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    contentPadding = PaddingValues(8.dp)
-                ) {
-                    itemsIndexed(gridItems, key = { _, t -> t.uri.toString() }) { _, t ->
-                        val selected = t.uri in ui.selected
-                        Box(
-                            Modifier.aspectRatio(1f).clip(RoundedCornerShape(10.dp))
-                                .background(Color(0x11000000))
-                                .clickable {
-                                    if (selected || vm.canSelectMore()) {
-                                        vm.toggleSelect(t.uri)
+                Scaffold(
+                    topBar = {
+                        var showMenu by remember { mutableStateOf(false) }
+                        CenterAlignedTopAppBar(
+                            title = {
+                                Box {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.clickable { showMenu = true }
+                                    ) {
+                                        Text(galleryFilter, fontWeight = FontWeight.Bold)
+                                        Icon(Icons.Outlined.ArrowDropDown, contentDescription = "Filter")
+                                    }
+                                    DropdownMenu(
+                                        expanded = showMenu,
+                                        onDismissRequest = { showMenu = false }
+                                    ) {
+                                        DropdownMenuItem(text = { Text("Recientes") }, onClick = { galleryFilter = "Recientes"; showMenu = false })
+                                        if (ui.config.mediaType != MediaType.VIDEO_ONLY) {
+                                            DropdownMenuItem(text = { Text("Fotos") }, onClick = { galleryFilter = "Fotos"; showMenu = false })
+                                        }
+                                        if (ui.config.mediaType != MediaType.PHOTO_ONLY) {
+                                            DropdownMenuItem(text = { Text("Videos") }, onClick = { galleryFilter = "Videos"; showMenu = false })
+                                        }
                                     }
                                 }
+                            },
+                            navigationIcon = {
+                                IconButton(onClick = { vm.clearSelection(); showGallery = false }) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Close"
+                                    )
+                                }
+                            },
+                            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent),
+                            windowInsets = WindowInsets(0)
+                        )
+                    },
+                    bottomBar = {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.End
                         ) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(ctx).data(t.uri).build(),
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                            if (t.isVideo) {
-                                Icon(Icons.Outlined.Videocam, null,
-                                    modifier = Modifier.align(Alignment.BottomStart).padding(4.dp).size(16.dp),
-                                    tint = Color.White)
-                            }
-                            if (selected) {
-                                Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = .35f)))
-                                Box(
-                                    Modifier.padding(6.dp).size(20.dp).clip(RoundedCornerShape(6.dp))
-                                        .background(MaterialTheme.colorScheme.primary).align(Alignment.TopEnd),
-                                    contentAlignment = Alignment.Center
-                                ) { Icon(Icons.Outlined.Check, null, tint = Color.White, modifier = Modifier.size(14.dp)) }
+                            Button(
+                                onClick = { sendUris(ui.selected); showGallery = false },
+                                enabled = ui.selected.isNotEmpty()
+                            ) {
+                                val maxText = if (ui.config.maxSelection == Int.MAX_VALUE) "" else "/${ui.config.maxSelection}"
+                                Text("Añadir (${ui.selected.size}$maxText)")
                             }
                         }
                     }
-                }
-                Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = { vm.clearSelection(); showGallery = false }) { Text("Cancelar") }
-                    Spacer(Modifier.width(8.dp))
-                    Button(onClick = { sendUris(ui.selected); showGallery = false },
-                        enabled = ui.selected.isNotEmpty()) {
-                        val maxText = if (ui.config.maxSelection == Int.MAX_VALUE) "" else "/${ui.config.maxSelection}"
-                        Text("Añadir (${ui.selected.size}$maxText)")
+                ) { innerPadding ->
+                    val gridItems = remember(galleryFilter, ui.gallery) {
+                        when (galleryFilter) {
+                            "Fotos" -> ui.gallery.filter { !it.isVideo }
+                            "Videos" -> ui.gallery.filter { it.isVideo }
+                            else -> ui.gallery
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background)
+                            .padding(
+                                top = innerPadding.calculateTopPadding(),
+                            )
+                            .consumeWindowInsets(innerPadding)
+                    ) {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(3),
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            contentPadding = PaddingValues(4.dp)
+                        ) {
+                            itemsIndexed(gridItems, key = { _, t -> t.uri.toString() }) { _, t ->
+                                val selected = t.uri in ui.selected
+                                Box(
+                                    Modifier
+                                        .aspectRatio(1f)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0x11000000))
+                                        .clickable { vm.toggleSelect(t.uri) }
+                                ) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(ctx).data(t.uri).build(),
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                    if (t.isVideo) {
+                                        Icon(Icons.Outlined.Videocam, null,
+                                            modifier = Modifier.align(Alignment.BottomStart).padding(4.dp).size(16.dp),
+                                            tint = Color.White)
+                                    }
+                                    if (selected) {
+                                        Box(Modifier.matchParentSize().background(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)))
+                                        Box(
+                                            Modifier.padding(8.dp).size(24.dp).clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary).align(Alignment.TopEnd),
+                                            contentAlignment = Alignment.Center
+                                        ) { Icon(Icons.Outlined.Check, null, tint = Color.White, modifier = Modifier.size(16.dp)) }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
