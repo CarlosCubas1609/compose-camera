@@ -222,12 +222,17 @@ fun MediaCameraScreen(
             modifier = Modifier.fillMaxWidth()
                 .padding(8.dp)
         ) {
-            IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart)) {
+            IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart)
+                .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+            ) {
                 Icon(Icons.Outlined.Close, null, tint = Color.White)
             }
             if (ui.recSeconds > 0 && ui.recording) {
                 Row(
-                    Modifier.align(Alignment.TopCenter),
+                    Modifier.align(Alignment.TopCenter)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(Modifier.size(8.dp).clip(CircleShape).background(Color.Red))
@@ -238,6 +243,7 @@ fun MediaCameraScreen(
             IconButton(
                 onClick = { if (ui.recording) vm.toggleTorch(controller) else vm.toggleFlash(controller) },
                 modifier = Modifier.align(Alignment.TopEnd)
+                    .background(Color.Black.copy(alpha = 0.4f), CircleShape)
             ) {
                 val on = if (ui.recording) ui.torchOn else ui.flashMode == ImageCapture.FLASH_MODE_ON
                 Icon(if (on) Icons.Outlined.FlashOn else Icons.Outlined.FlashOff, null, tint = Color.White)
@@ -312,7 +318,9 @@ fun MediaCameraScreen(
             Box(Modifier.fillMaxWidth().height(96.dp).padding(horizontal = 18.dp)) {
                 // Gallery button: hide when long-pressing
                 if (!ui.longPressingToRecord) {
-                    IconButton(onClick = { showGallery = true }, modifier = Modifier.align(Alignment.CenterStart)) {
+                    IconButton(onClick = { showGallery = true }, modifier = Modifier.align(Alignment.CenterStart)
+                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                    ) {
                         Icon(Icons.Outlined.Collections, null, tint = Color.White)
                     }
                 }
@@ -403,7 +411,9 @@ fun MediaCameraScreen(
 
                 // Switch camera button: hide when long-pressing
                 if (!ui.longPressingToRecord) {
-                    IconButton(onClick = { vm.switchCamera(controller) }, modifier = Modifier.align(Alignment.CenterEnd)) {
+                    IconButton(onClick = { vm.switchCamera(controller) }, modifier = Modifier.align(Alignment.CenterEnd)
+                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                    ) {
                         Icon(Icons.Outlined.Cameraswitch, null, tint = Color.White)
                     }
                 }
@@ -648,10 +658,10 @@ private fun ImageReviewWithCropOverlay(
                 .fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            IconButton(onClick = onClose) {
+            IconButton(onClick = onClose, modifier = Modifier.background(Color.Black.copy(alpha = 0.4f), CircleShape)) {
                 Icon(Icons.Outlined.Close, null, tint = Color.White)
             }
-            IconButton(onClick = { showCropper = true }) {
+            IconButton(onClick = { showCropper = true }, modifier = Modifier.background(Color.Black.copy(alpha = 0.4f), CircleShape)) {
                 Icon(Icons.Outlined.Crop, null, tint = Color.White)
             }
         }
@@ -796,7 +806,9 @@ private fun VideoReviewOverlay(
                 }
             }
 
-            IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) {
+            IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
+                .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+            ) {
                 Icon(Icons.Outlined.Close, null, tint = Color.White)
             }
         }
