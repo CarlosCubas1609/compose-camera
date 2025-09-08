@@ -32,7 +32,7 @@ Add the dependency:
 
 ```kotlin
 dependencies {
-    implementation("com.github.ccubas:compose-camera:1.0.0")
+    implementation("com.github.CarlosCubas1609:compose-camera:1.0.0")
 }
 ```
 
