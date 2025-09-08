@@ -87,10 +87,10 @@ fun MediaCameraScreen(
         vm.setConfig(config)
     }
     val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    val exec = rememberSaveable(ctx) { ContextCompat.getMainExecutor(ctx) }
+    val exec = remember(ctx) { ContextCompat.getMainExecutor(ctx) }
     val ui by vm.ui.collectAsState()
 
-    val imageLoader = rememberSaveable {
+    val imageLoader = remember {
         ImageLoader.Builder(ctx).components {
             add(VideoFrameDecoder.Factory())
         }.build()
