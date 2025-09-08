@@ -482,20 +482,11 @@ fun MediaCameraScreen(
                         Box(
                             Modifier.aspectRatio(1f).clip(RoundedCornerShape(10.dp))
                                 .background(Color(0x11000000))
-                                .combinedClickable(
-                                    onClick = {
-                                        if (vm.hasSelectedItems()) {
-                                            // Si ya hay elementos seleccionados y se puede seleccionar más
-                                            if (selected || vm.canSelectMore()) {
-                                                vm.toggleSelect(t.uri)
-                                            }
-                                        } else {
-                                            // Si no hay elementos seleccionados, previsualizar
-                                            vm.previewFromCarousel(t.uri, t.isVideo)
-                                        }
-                                    },
-                                    onLongClick = { vm.toggleSelect(t.uri) }
-                                )
+                                .clickable {
+                                    if (selected || vm.canSelectMore()) {
+                                        vm.toggleSelect(t.uri)
+                                    }
+                                }
                         ) {
                             AsyncImage(
                                 model = ImageRequest.Builder(ctx).data(t.uri).build(),

@@ -53,7 +53,7 @@ fun MainContent() {
     var capturedMedia by rememberSaveable { mutableStateOf<List<Uri>?>(null) }
     val picker = rememberMediaCameraLauncher(
         config = MediaCameraConfig(
-            maxSelection = 1,
+            saveToMediaStore = true,
         )
     )
     Column(
