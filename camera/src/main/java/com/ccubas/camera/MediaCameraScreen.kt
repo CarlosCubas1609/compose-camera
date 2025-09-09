@@ -2,46 +2,35 @@ package com.ccubas.camera
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.view.View
 import androidx.camera.core.*
 import androidx.camera.view.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Crop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.*
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
@@ -53,13 +42,172 @@ import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
-import com.ccubas.camera.components.CropperFullScreen
+import com.ccubas.camera.components.*
+import com.ccubas.camera.components.camera.CameraControls
+import com.ccubas.camera.components.camera.CameraTopBar
+import com.ccubas.camera.components.camera.MediaCarousel
+import com.ccubas.camera.components.camera.MediaGallery
+import com.ccubas.camera.components.camera.MediaThumbnail
+import com.ccubas.camera.components.camera.ModeSwitcher
+import com.ccubas.camera.components.camera.SendButton
 import com.ccubas.composecamera.models.CameraMode
 import com.ccubas.composecamera.models.MediaCameraConfig
 import com.ccubas.composecamera.models.MediaType
 import kotlinx.coroutines.delay
 import kotlin.math.max
 import kotlin.math.min
+
+/**
+ * UI state data for MediaCameraContent preview purposes
+ */
+data class MediaCameraUIState(
+    val recording: Boolean = false,
+    val recSeconds: Int = 0,
+    val flashMode: Int = 0,
+    val torchOn: Boolean = false,
+    val mode: CameraMode = CameraMode.Photo,
+    val longPressingToRecord: Boolean = false,
+    val thumbs: List<MediaThumbnail> = emptyList(),
+    val selected: List<Uri> = emptyList(),
+    val config: MediaCameraConfig = MediaCameraConfig(),
+    val gallery: List<MediaThumbnail> = emptyList(),
+    val previewImage: Uri? = null,
+    val previewVideo: Uri? = null
+)
+
+/**
+ * Content component of MediaCameraScreen that can be previewed
+ * Contains all UI elements without ViewModel or Camera dependencies
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
+@Composable
+fun MediaCameraContent(
+    ui: MediaCameraUIState,
+    imageLoader: ImageLoader,
+    shutterModifier: Modifier = Modifier,
+    showGallery: Boolean = false,
+    onClose: () -> Unit = {},
+    onFlashTorchToggle: () -> Unit = {},
+    onItemClick: (Uri, Boolean) -> Unit = { _, _ -> },
+    onItemLongClick: (Uri) -> Unit = {},
+    onSwipeUp: () -> Unit = {},
+    onGalleryClick: () -> Unit = {},
+    onSwitchCamera: () -> Unit = {},
+    onModeChange: (CameraMode) -> Unit = {},
+    onSend: (List<Uri>) -> Unit = {},
+    onDismissGallery: () -> Unit = {},
+    onToggleSelect: (Uri) -> Unit = {},
+    onSendSelection: (List<Uri>) -> Unit = {},
+    onImagePreviewClose: () -> Unit = {},
+    onImagePreviewUse: (Uri) -> Unit = {},
+    onVideoPreviewClose: () -> Unit = {},
+    onVideoPreviewSave: (Long, Long) -> Unit = { _, _ -> },
+    cameraPreviewContent: @Composable () -> Unit = {
+        // Mock camera preview for previews
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "Camera Preview",
+                color = Color.White,
+                style = MaterialTheme.typography.headlineLarge
+            )
+        }
+    }
+) {
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+
+        // CAMERA PREVIEW
+        cameraPreviewContent()
+
+        // TOP BAR
+        CameraTopBar(
+            isRecording = ui.recording,
+            recordingSeconds = ui.recSeconds,
+            flashMode = ui.flashMode,
+            torchOn = ui.torchOn,
+            onClose = onClose,
+            onFlashTorchToggle = onFlashTorchToggle
+        )
+
+        // BOTTOM
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+        ) {
+            // MEDIA CAROUSEL: only in Photo mode and hide when long-pressing
+            if (ui.mode == CameraMode.Photo && !ui.longPressingToRecord) {
+                MediaCarousel(
+                    thumbnails = ui.thumbs,
+                    selectedUris = ui.selected,
+                    imageLoader = imageLoader,
+                    onItemClick = onItemClick,
+                    onItemLongClick = onItemLongClick,
+                    onSwipeUp = onSwipeUp
+                )
+            }
+
+            // CAMERA CONTROLS
+            CameraControls(
+                isLongPressing = ui.longPressingToRecord,
+                isRecording = ui.recording,
+                cameraMode = ui.mode,
+                shutterModifier = shutterModifier,
+                onGalleryClick = onGalleryClick,
+                onSwitchCamera = onSwitchCamera
+            )
+
+            // MODE SWITCHER
+            ModeSwitcher(
+                currentMode = ui.mode,
+                mediaType = ui.config.mediaType,
+                onModeChange = onModeChange,
+                modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp)
+            )
+
+            // SEND BUTTON
+            SendButton(
+                selectedUris = ui.selected,
+                maxSelection = ui.config.maxSelection,
+                onSend = onSend
+            )
+        }
+
+        // MEDIA GALLERY
+        if (showGallery) {
+            MediaGallery(
+                galleryItems = ui.gallery,
+                selectedUris = ui.selected,
+                config = ui.config,
+                imageLoader = imageLoader,
+                onDismiss = onDismissGallery,
+                onToggleSelect = onToggleSelect,
+                onSendSelection = onSendSelection
+            )
+        }
+
+        // Preview of the recently taken photo
+        ui.previewImage?.let { src ->
+            ImageReviewWithCropOverlay(
+                src = src,
+                onClose = onImagePreviewClose,
+                onUse = onImagePreviewUse
+            )
+        }
+
+        // Preview + Crop of the recently recorded/selected video
+        ui.previewVideo?.let { src ->
+            VideoReviewOverlay(
+                src = src,
+                onClose = onVideoPreviewClose,
+                onSaveTrim = onVideoPreviewSave
+            )
+        }
+
+    }
+}
 
 /**
  * The main screen for the media camera, providing a camera preview, capture controls,
@@ -138,8 +286,6 @@ fun MediaCameraScreen(
         onClose()
     }
 
-    // --- helpers ---
-    fun formatTimer(s: Int): String = "%02d:%02d".format(s / 60, s % 60)
 
     // --- Shutter ---
     val shutterModifier =
@@ -213,435 +359,85 @@ fun MediaCameraScreen(
 
 
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
-
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = {
-                PreviewView(it).apply {
-                    this.controller = controller
-                    scaleType = PreviewView.ScaleType.FILL_CENTER
+    MediaCameraContent(
+        ui = MediaCameraUIState(
+            recording = ui.recording,
+            recSeconds = ui.recSeconds,
+            flashMode = ui.flashMode,
+            torchOn = ui.torchOn,
+            mode = ui.mode,
+            longPressingToRecord = ui.longPressingToRecord,
+            thumbs = ui.thumbs.map { MediaThumbnail(it.uri, it.isVideo) },
+            selected = ui.selected,
+            config = ui.config,
+            gallery = ui.gallery.map { MediaThumbnail(it.uri, it.isVideo) },
+            previewImage = ui.previewImage,
+            previewVideo = ui.previewVideo
+        ),
+        imageLoader = imageLoader,
+        shutterModifier = shutterModifier,
+        showGallery = showGallery,
+        onClose = onClose,
+        onFlashTorchToggle = {
+            if (ui.recording) vm.toggleTorch(controller)
+            else vm.toggleFlash(controller)
+        },
+        onItemClick = { uri, isVideo ->
+            if (vm.hasSelectedItems()) {
+                vm.toggleSelect(uri)
+            } else {
+                vm.previewFromCarousel(uri, isVideo)
+            }
+        },
+        onItemLongClick = { uri -> vm.toggleSelect(uri) },
+        onSwipeUp = { showGallery = true },
+        onGalleryClick = { showGallery = true },
+        onSwitchCamera = { vm.switchCamera(controller) },
+        onModeChange = { mode -> vm.setMode(mode) },
+        onSend = { uris -> sendUris(uris) },
+        onDismissGallery = {
+            vm.clearSelection()
+            showGallery = false
+        },
+        onToggleSelect = { uri -> vm.toggleSelect(uri) },
+        onSendSelection = { uris ->
+            sendUris(uris)
+            showGallery = false
+        },
+        onImagePreviewClose = { vm.dismissImagePreview() },
+        onImagePreviewUse = { croppedUri ->
+            vm.saveImageAndSend(croppedUri) { permanentUri ->
+                if (permanentUri != null) {
+                    sendUris(listOf(permanentUri))
+                } else {
+                    vm.dismissImagePreview()
                 }
             }
-        )
-
-
-        // TOP: close / flash and, if recording, timer at the center
-        Box(
-            modifier = Modifier.fillMaxWidth()
-                .padding(8.dp)
-        ) {
-            IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart)
-                .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-            ) {
-                Icon(Icons.Outlined.Close, null, tint = Color.White)
-            }
-            if (ui.recSeconds > 0 && ui.recording) {
-                Row(
-                    Modifier.align(Alignment.TopCenter)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.Black.copy(alpha = 0.4f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(Color.Red))
-                    Spacer(Modifier.width(6.dp))
-                    Text(formatTimer(ui.recSeconds), color = Color.White, style = MaterialTheme.typography.labelLarge)
-                }
-            }
-            IconButton(
-                onClick = { if (ui.recording) vm.toggleTorch(controller) else vm.toggleFlash(controller) },
-                modifier = Modifier.align(Alignment.TopEnd)
-                    .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-            ) {
-                val on = if (ui.recording) ui.torchOn else ui.flashMode == ImageCapture.FLASH_MODE_ON
-                Icon(if (on) Icons.Outlined.FlashOn else Icons.Outlined.FlashOff, null, tint = Color.White)
-            }
-        }
-
-        // BOTTOM
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-        ) {
-            // Carousel at the top: only in Photo mode and hide when long-pressing
-            if (ui.mode == CameraMode.Photo && !ui.longPressingToRecord) {
-                val swipeUpToSheet = remember { 60f }
-                LazyRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(76.dp)
-                        .pointerInput(Unit) {
-                            detectVerticalDragGestures { _, drag ->
-                                if (drag < -swipeUpToSheet) showGallery = true
-                            }
-                        }
-                        .padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = PaddingValues(end = 8.dp)
-                ) {
-                    itemsIndexed(ui.thumbs, key = { _, t -> t.uri.toString() }) { _, t ->
-                        val selected = t.uri in ui.selected
-
-                        val request = if (t.isVideo) {
-                            ImageRequest.Builder(ctx)
-                                .data(t.uri)
-                                .setParameter(VideoFrameDecoder.VIDEO_FRAME_MICROS_KEY, 1_000_000L) // 1s
-                                .setParameter(
-                                    VideoFrameDecoder.VIDEO_FRAME_OPTION_KEY,
-                                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC
-                                )
-                                .build()
-                        } else {
-                            ImageRequest.Builder(ctx).data(t.uri).build()
-                        }
-                        Box(
-                            Modifier
-                                .size(70.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0x33000000))
-                                .combinedClickable(
-                                    onClick = {
-                                        if (vm.hasSelectedItems()) {
-                                            vm.toggleSelect(t.uri)
-                                        } else {
-                                            vm.previewFromCarousel(t.uri, t.isVideo)
-                                        }
-                                    },
-                                    onLongClick = { vm.toggleSelect(t.uri) }
-                                )
-                        ) {
-                            AsyncImage(
-                                model = request,
-                                imageLoader = imageLoader,
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                            if (t.isVideo) {
-                                Icon(Icons.Outlined.Videocam, null,
-                                    modifier = Modifier.align(Alignment.BottomStart).padding(4.dp).size(16.dp),
-                                    tint = Color.White)
-                            }
-                            if (selected) {
-                                Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = .35f)))
-                                Box(
-                                    Modifier.padding(6.dp).size(18.dp).clip(RoundedCornerShape(6.dp))
-                                        .background(MaterialTheme.colorScheme.primary).align(Alignment.TopEnd),
-                                    contentAlignment = Alignment.Center
-                                ) { Icon(Icons.Outlined.Check, null, tint = Color.White, modifier = Modifier.size(12.dp)) }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Controls: gallery / shutter / switch
-            Box(Modifier.fillMaxWidth().height(96.dp).padding(horizontal = 18.dp)) {
-                // Gallery button: hide when long-pressing
-                if (!ui.longPressingToRecord) {
-                    IconButton(onClick = { showGallery = true }, modifier = Modifier.align(Alignment.CenterStart)
-                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-                    ) {
-                        Icon(Icons.Outlined.Collections, null, tint = Color.White)
-                    }
-                }
-
-                // Shutter button with WhatsApp design on long press
-                Box(
-                    Modifier
-                        .size(if (ui.longPressingToRecord) 96.dp else 84.dp) // Larger button during long press
-                        .clip(CircleShape)
-                        .background(
-                            if (ui.longPressingToRecord || ui.recording) Color.Transparent // No background when recording
-                            else Color.White.copy(alpha = .15f) // Normal white background
-                        )
-                        .align(Alignment.Center)
-                        .then(shutterModifier),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (ui.longPressingToRecord) {
-                        // Long press design in photo mode: white ring + black background + red dot
-                        Box(
-                            Modifier
-                                .size(96.dp) // Larger button
-                                .clip(CircleShape)
-                                .background(Color.White) // Outer white ring
-                                .padding(6.dp), // Thickness of the white ring
-                            contentAlignment = Alignment.Center
-                        ) {
-                            // Inner black background
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.8f))
-                                    .padding(20.dp), // More padding = smaller red dot
-                                contentAlignment = Alignment.Center
-                            ) {
-                                // Small red dot in the center
-                                Box(
-                                    Modifier
-                                        .fillMaxSize()
-                                        .clip(CircleShape)
-                                        .background(Color.Red)
-                                )
-                            }
-                        }
-                    } else if (ui.recording) {
-                        // Design during recording: white circle + red square
-                        Box(
-                            Modifier
-                                .size(84.dp)
-                                .clip(CircleShape)
-                                .background(Color.White) // White border
-                                .padding(6.dp), // Border thickness
-                            contentAlignment = Alignment.Center
-                        ) {
-                            // Transparent/black background
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.8f))
-                                    .padding(12.dp), // Space for the square
-                                contentAlignment = Alignment.Center
-                            ) {
-                                // Inner red square
-                                Box(
-                                    Modifier
-                                        .fillMaxSize()
-                                        .clip(
-                                            if (ui.mode == CameraMode.Video) RoundedCornerShape(4.dp) // Rounded square
-                                            else CircleShape // Circle for photo
-                                        )
-                                        .background(Color.Red)
-                                        .padding(20.dp), // More padding = smaller red square
-                                )
-                            }
-                        }
+        },
+        onVideoPreviewClose = { vm.dismissVideoPreview() },
+        onVideoPreviewSave = { sMs, eMs ->
+            ui.previewVideo?.let { src ->
+                vm.trimVideoAndSave(src, sMs * 1000, eMs * 1000) { permanentUri ->
+                    if (permanentUri != null) {
+                        sendUris(listOf(permanentUri))
                     } else {
-                        // Normal design: white button
-                        Box(
-                            Modifier
-                                .size(64.dp)
-                                .clip(CircleShape)
-                                .background(Color.White)
-                        )
-                    }
-                }
-
-                // Switch camera button: hide when long-pressing
-                if (!ui.longPressingToRecord) {
-                    IconButton(onClick = { vm.switchCamera(controller) }, modifier = Modifier.align(Alignment.CenterEnd)
-                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-                    ) {
-                        Icon(Icons.Outlined.Cameraswitch, null, tint = Color.White)
+                        vm.dismissVideoPreview()
                     }
                 }
             }
-
-            // Modes (Video / Photo) - show based on configuration
-            if (ui.config.mediaType == MediaType.BOTH) {
-                Row(
-                    Modifier.align(Alignment.CenterHorizontally)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.Black.copy(alpha=.45f))
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Text("Video",
-                        color = if (ui.mode==CameraMode.Video) Color.White else Color.White.copy(alpha=.7f),
-                        modifier = Modifier.clickable { vm.setMode(CameraMode.Video) })
-                    Text("Foto",
-                        color = if (ui.mode==CameraMode.Photo) Color.White else Color.White.copy(alpha=.7f),
-                        modifier = Modifier.clickable { vm.setMode(CameraMode.Photo) })
-                }
-            }
-
-            // Optional send selection
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.End) {
-                Button(onClick = { sendUris(ui.selected) }, enabled = ui.selected.isNotEmpty()) {
-                    val maxText = if (ui.config.maxSelection == Int.MAX_VALUE) "" else "/${ui.config.maxSelection}"
-                    Text("Enviar (${ui.selected.size}$maxText)")
-                }
-            }
-        }
-
-        // Gallery BottomSheet (multi-selection)
-        if (showGallery) {
-            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-            var galleryFilter by remember { mutableStateOf("Recientes") }
-
-            ModalBottomSheet(
-                onDismissRequest = { vm.clearSelection(); showGallery = false },
-                sheetState = sheetState,
+        },
+        cameraPreviewContent = {
+            AndroidView(
                 modifier = Modifier.fillMaxSize(),
-                contentWindowInsets = { WindowInsets.navigationBarsIgnoringVisibility }
-            ) {
-                Scaffold(
-                    topBar = {
-                        var showMenu by remember { mutableStateOf(false) }
-                        CenterAlignedTopAppBar(
-                            title = {
-                                Box {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.clickable { showMenu = true }
-                                    ) {
-                                        Text(galleryFilter, fontWeight = FontWeight.Bold)
-                                        Icon(Icons.Outlined.ArrowDropDown, contentDescription = "Filter")
-                                    }
-                                    DropdownMenu(
-                                        expanded = showMenu,
-                                        onDismissRequest = { showMenu = false }
-                                    ) {
-                                        DropdownMenuItem(text = { Text("Recientes") }, onClick = { galleryFilter = "Recientes"; showMenu = false })
-                                        if (ui.config.mediaType != MediaType.VIDEO_ONLY) {
-                                            DropdownMenuItem(text = { Text("Fotos") }, onClick = { galleryFilter = "Fotos"; showMenu = false })
-                                        }
-                                        if (ui.config.mediaType != MediaType.PHOTO_ONLY) {
-                                            DropdownMenuItem(text = { Text("Videos") }, onClick = { galleryFilter = "Videos"; showMenu = false })
-                                        }
-                                    }
-                                }
-                            },
-                            navigationIcon = {
-                                IconButton(onClick = { vm.clearSelection(); showGallery = false }) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "Close"
-                                    )
-                                }
-                            },
-                            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent),
-                            windowInsets = WindowInsets(0)
-                        )
-                    },
-                    bottomBar = {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            Button(
-                                onClick = { sendUris(ui.selected); showGallery = false },
-                                enabled = ui.selected.isNotEmpty()
-                            ) {
-                                val maxText = if (ui.config.maxSelection == Int.MAX_VALUE) "" else "/${ui.config.maxSelection}"
-                                Text("Añadir (${ui.selected.size}$maxText)")
-                            }
-                        }
-                    }
-                ) { innerPadding ->
-                    val gridItems = remember(galleryFilter, ui.gallery) {
-                        when (galleryFilter) {
-                            "Fotos" -> ui.gallery.filter { !it.isVideo }
-                            "Videos" -> ui.gallery.filter { it.isVideo }
-                            else -> ui.gallery
-                        }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.background)
-                            .padding(
-                                top = innerPadding.calculateTopPadding(),
-                            )
-                            .consumeWindowInsets(innerPadding)
-                    ) {
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(3),
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            contentPadding = PaddingValues(4.dp)
-                        ) {
-                            itemsIndexed(gridItems, key = { _, t -> t.uri.toString() }) { _, t ->
-                                val selected = t.uri in ui.selected
-                                val request = if (t.isVideo) {
-                                    ImageRequest.Builder(ctx)
-                                        .data(t.uri)
-                                        .setParameter(VideoFrameDecoder.VIDEO_FRAME_MICROS_KEY, 1_000_000L) // frame al 1s
-                                        .build()
-                                } else {
-                                    ImageRequest.Builder(ctx)
-                                        .data(t.uri)
-                                        .build()
-                                }
-                                Box(
-                                    Modifier
-                                        .aspectRatio(1f)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(Color(0x11000000))
-                                        .clickable { vm.toggleSelect(t.uri) }
-                                ) {
-                                    AsyncImage(
-                                        model = request,
-                                        imageLoader = imageLoader,
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                    if (t.isVideo) {
-                                        Icon(Icons.Outlined.Videocam, null,
-                                            modifier = Modifier.align(Alignment.BottomStart).padding(4.dp).size(16.dp),
-                                            tint = Color.White)
-                                    }
-                                    if (selected) {
-                                        Box(Modifier.matchParentSize().background(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)))
-                                        Box(
-                                            Modifier.padding(8.dp).size(24.dp).clip(CircleShape)
-                                                .background(MaterialTheme.colorScheme.primary).align(Alignment.TopEnd),
-                                            contentAlignment = Alignment.Center
-                                        ) { Icon(Icons.Outlined.Check, null, tint = Color.White, modifier = Modifier.size(16.dp)) }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Preview of the recently taken photo
-        ui.previewImage?.let { src ->
-            ImageReviewWithCropOverlay(
-                src = src,
-                onClose = { vm.dismissImagePreview() },
-                onUse = { croppedUri ->
-                    vm.saveImageAndSend(croppedUri) { permanentUri ->
-                        if (permanentUri != null) {
-                            sendUris(listOf(permanentUri))
-                        } else {
-                            vm.dismissImagePreview()
-                        }
+                factory = {
+                    PreviewView(it).apply {
+                        this.controller = controller
+                        scaleType = PreviewView.ScaleType.FILL_CENTER
                     }
                 }
             )
         }
-
-        // Preview + Crop of the recently recorded/selected video
-        ui.previewVideo?.let { src ->
-            VideoReviewOverlay(
-                src = src,
-                onClose = { vm.dismissVideoPreview() },
-                onSaveTrim = { sMs, eMs ->
-                    vm.trimVideoAndSave(src, sMs * 1000, eMs * 1000) { permanentUri ->
-                        if (permanentUri != null) {
-                            sendUris(listOf(permanentUri))
-                        } else {
-                            vm.dismissVideoPreview()
-                        }
-                    }
-                }
-            )
-        }
-    }
+    )
 
     // Total cleanup when destroying the composable
     DisposableEffect(Unit) {
@@ -849,4 +645,149 @@ private fun VideoReviewOverlay(
     }
 
     DisposableEffect(Unit) { onDispose { exo.release() } }
+}
+
+// ===== PREVIEWS DEL MEDIA CAMERA CONTENT =====
+
+@Preview(showBackground = true, widthDp = 400, heightDp = 800)
+@Composable
+fun MediaCameraContentPreview() {
+    val context = LocalContext.current
+    val imageLoader = remember {
+        ImageLoader.Builder(context).components {
+            add(VideoFrameDecoder.Factory())
+        }.build()
+    }
+
+    val mockThumbnails = remember {
+        listOf(
+            MediaThumbnail("content://media/1".toUri(), false),
+            MediaThumbnail("content://media/2".toUri(), true),
+            MediaThumbnail("content://media/3".toUri(), false),
+            MediaThumbnail("content://media/4".toUri(), true),
+        )
+    }
+
+    MaterialTheme {
+        MediaCameraContent(
+            ui = MediaCameraUIState(
+                recording = false,
+                mode = CameraMode.Photo,
+                thumbs = mockThumbnails,
+                selected = listOf("content://media/2".toUri()),
+                config = MediaCameraConfig()
+            ),
+            imageLoader = imageLoader
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 400, heightDp = 800)
+@Composable
+fun MediaCameraContentRecordingPreview() {
+    val context = LocalContext.current
+    val imageLoader = remember {
+        ImageLoader.Builder(context).components {
+            add(VideoFrameDecoder.Factory())
+        }.build()
+    }
+
+    MaterialTheme {
+        MediaCameraContent(
+            ui = MediaCameraUIState(
+                recording = true,
+                recSeconds = 45,
+                mode = CameraMode.Video,
+                config = MediaCameraConfig()
+            ),
+            imageLoader = imageLoader
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 400, heightDp = 800)
+@Composable
+fun MediaCameraContentLongPressingPreview() {
+    val context = LocalContext.current
+    val imageLoader = remember {
+        ImageLoader.Builder(context).components {
+            add(VideoFrameDecoder.Factory())
+        }.build()
+    }
+
+    MaterialTheme {
+        MediaCameraContent(
+            ui = MediaCameraUIState(
+                recording = true,
+                recSeconds = 8,
+                mode = CameraMode.Photo,
+                longPressingToRecord = true,
+                config = MediaCameraConfig()
+            ),
+            imageLoader = imageLoader
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 400, heightDp = 800)
+@Composable
+fun MediaCameraContentPhotoOnlyPreview() {
+    val context = LocalContext.current
+    val imageLoader = remember {
+        ImageLoader.Builder(context).components {
+            add(VideoFrameDecoder.Factory())
+        }.build()
+    }
+
+    val mockThumbnails = remember {
+        listOf(
+            MediaThumbnail("content://media/1".toUri(), false),
+            MediaThumbnail("content://media/2".toUri(), false),
+            MediaThumbnail("content://media/3".toUri(), false),
+        )
+    }
+
+    MaterialTheme {
+        MediaCameraContent(
+            ui = MediaCameraUIState(
+                mode = CameraMode.Photo,
+                thumbs = mockThumbnails,
+                config = MediaCameraConfig(mediaType = MediaType.PHOTO_ONLY)
+            ),
+            imageLoader = imageLoader
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 400, heightDp = 800)
+@Composable
+fun MediaCameraContentWithGalleryPreview() {
+    val context = LocalContext.current
+    val imageLoader = remember {
+        ImageLoader.Builder(context).components {
+            add(VideoFrameDecoder.Factory())
+        }.build()
+    }
+
+    val mockGalleryItems = remember {
+        List(12) { index ->
+            MediaThumbnail(
+                "content://media/gallery_$index".toUri(), 
+                index % 3 == 0
+            )
+        }
+    }
+
+    MaterialTheme {
+        MediaCameraContent(
+            ui = MediaCameraUIState(
+                mode = CameraMode.Photo,
+                gallery = mockGalleryItems,
+                selected = listOf("content://media/gallery_2".toUri()),
+                config = MediaCameraConfig()
+            ),
+            imageLoader = imageLoader,
+            showGallery = true
+        )
+    }
 }
