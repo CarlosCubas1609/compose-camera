@@ -8,6 +8,7 @@ import androidx.camera.core.*
 import androidx.camera.view.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -22,10 +23,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.*
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -49,7 +52,6 @@ import com.ccubas.camera.components.camera.MediaCarousel
 import com.ccubas.camera.components.camera.MediaGallery
 import com.ccubas.camera.components.camera.MediaThumbnail
 import com.ccubas.camera.components.camera.ModeSwitcher
-import com.ccubas.camera.components.camera.SendButton
 import com.ccubas.composecamera.models.CameraMode
 import com.ccubas.composecamera.models.MediaCameraConfig
 import com.ccubas.composecamera.models.MediaType
@@ -105,7 +107,9 @@ fun MediaCameraContent(
     cameraPreviewContent: @Composable () -> Unit = {
         // Mock camera preview for previews
         Box(
-            modifier = Modifier.fillMaxSize().background(Color.Black),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -116,7 +120,9 @@ fun MediaCameraContent(
         }
     }
 ) {
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier
+        .fillMaxSize()
+        .background(Color.Black)) {
 
         // CAMERA PREVIEW
         cameraPreviewContent()
@@ -164,15 +170,12 @@ fun MediaCameraContent(
                 currentMode = ui.mode,
                 mediaType = ui.config.mediaType,
                 onModeChange = onModeChange,
-                modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp)
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(vertical = 4.dp)
             )
 
-            // SEND BUTTON
-            SendButton(
-                selectedUris = ui.selected,
-                maxSelection = ui.config.maxSelection,
-                onSend = onSend
-            )
+            // SEND BUTTON removido - ahora es el botón flotante verde sobre el carousel
         }
 
         // MEDIA GALLERY
@@ -206,6 +209,38 @@ fun MediaCameraContent(
             )
         }
 
+        // BOTÓN VERDE FLOTANTE SOBRE EL CAROUSEL (reemplaza SendButton)
+        if (ui.mode == CameraMode.Photo && !ui.longPressingToRecord && ui.selected.isNotEmpty()) {
+            val maxText = if (ui.config.maxSelection == Int.MAX_VALUE) "" else "/${ui.config.maxSelection}"
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 210.dp, end = 10.dp) // Sobre el carousel
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF4CAF50)) // Verde como en la imagen
+                    .clickable { onSend(ui.selected) },
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Check,
+                        contentDescription = "Send selected items",
+                        tint = Color.White,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Text(
+                        text = "${ui.selected.size}$maxText",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -595,7 +630,10 @@ private fun VideoReviewOverlay(
                 .systemBarsPadding()
         ) {
 
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxSize().padding(16.dp)) {
+            Column(Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxSize()
+                .padding(16.dp)) {
                 AndroidView(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -636,7 +674,9 @@ private fun VideoReviewOverlay(
                 }
             }
 
-            IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
+            IconButton(onClick = onClose, modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(8.dp)
                 .background(Color.Black.copy(alpha = 0.4f), CircleShape)
             ) {
                 Icon(Icons.Outlined.Close, null, tint = Color.White)
