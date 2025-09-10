@@ -32,7 +32,7 @@ Add the dependency:
 
 ```kotlin
 dependencies {
-    implementation("com.github.CarlosCubas1609:compose-camera:1.0.0")
+    implementation("com.github.CarlosCubas1609:compose-camera:1.0.6")
 }
 ```
 
@@ -244,6 +244,10 @@ SOFTWARE.
 - WhatsApp for the UI/UX inspiration
 - Jetpack Compose team for the amazing UI toolkit
 
+### Demo
+![Demo 1](docs/giffs/giff_1.mp4)
+![Demo 2](docs/giffs/giff_2.mp4)
+
 ---
 
-Made with ❤️ by [Ccubas](https://github.com/ccubas)
+Made with ❤️ by [ccubas](https://github.com/CarlosCubas1609)
