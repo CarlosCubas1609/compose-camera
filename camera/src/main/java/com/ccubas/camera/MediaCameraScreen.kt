@@ -504,7 +504,7 @@ private fun ImageReviewWithCropOverlay(
             .fillMaxSize()
             .background(Color.Black)
             .systemBarsPadding()
-            .zIndex(1f)
+            .zIndex(2f)
     ) {
         // Simple preview (without cropping)
         AsyncImage(
@@ -626,7 +626,7 @@ private fun VideoReviewOverlay(
             Modifier
                 .fillMaxSize()
                 .background(Color.Black)     // <- opaque
-                .zIndex(1f)                  // <- above the camera
+                .zIndex(2f)                  // <- above the camera
                 .systemBarsPadding()
         ) {
 

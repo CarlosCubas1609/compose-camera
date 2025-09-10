@@ -279,7 +279,7 @@ fun MediaCameraScreenWithVideoReviewPreview() {
 fun InteractiveMediaCameraScreenPreview() {
     var currentState by remember { mutableStateOf("normal") }
     var cameraMode by remember { mutableStateOf(CameraMode.Photo) }
-    var isRecording by remember { mutableStateOf(false) }
+    var isRecording by remember { mutableStateOf(true) }
     
     MaterialTheme {
         Box {
@@ -288,7 +288,7 @@ fun InteractiveMediaCameraScreenPreview() {
                 "image_review" -> MediaCameraScreenPreview(showImageReview = true)
                 "video_review" -> MediaCameraScreenPreview(showVideoReview = true)
                 "recording" -> MediaCameraScreenPreview(
-                    isRecording = true,
+                    isRecording = isRecording,
                     recordingSeconds = 23,
                     cameraMode = cameraMode
                 )

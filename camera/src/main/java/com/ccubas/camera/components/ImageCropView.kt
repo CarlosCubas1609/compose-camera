@@ -467,7 +467,7 @@ fun CropperFullScreen(
             .fillMaxSize()
             .background(Color.Black)
             .systemBarsPadding()
-            .zIndex(2f)
+            .zIndex(3f)
     ) {
         ImageCropper(state = state, modifier = Modifier.fillMaxSize())
 
