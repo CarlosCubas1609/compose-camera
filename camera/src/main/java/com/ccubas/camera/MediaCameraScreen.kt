@@ -613,22 +613,7 @@ private fun VideoReviewOverlay(
 
     LaunchedEffect(range) { if (durationMs > 0) applyClip() }
 
-    // Lifecycle observer to handle pause/resume
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    LaunchedEffect(lifecycleOwner) {
-        val lifecycleObserver = object : DefaultLifecycleObserver {
-            override fun onPause(owner: LifecycleOwner) {
-                exo.pause()
-            }
-            
-            override fun onResume(owner: LifecycleOwner) {
-                if (durationMs > 0 && !paused) {
-                    exo.play()
-                }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
-    }
 
     // loop within the range
     LaunchedEffect(range, paused) {
@@ -640,13 +625,17 @@ private fun VideoReviewOverlay(
         }
     }
 
-    Box(
-        Modifier
+    Surface(
+        modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)     // <- opaque
-            .zIndex(2f)                  // <- above the camera
-            .systemBarsPadding()
+            .zIndex(2f),                 // <- zIndex aplicado al Surface principal
+        color = Color.Black
     ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .systemBarsPadding()
+        ) {
 
         Column(Modifier
             .align(Alignment.BottomCenter)
@@ -699,8 +688,33 @@ private fun VideoReviewOverlay(
         ) {
             Icon(Icons.Outlined.Close, null, tint = Color.White)
         }
+        }
     }
-    DisposableEffect(Unit) { onDispose { exo.release() } }
+    // Alternative approach using DisposableEffect for lifecycle management
+    DisposableEffect(lifecycleOwner) {
+        val lifecycleObserver = object : DefaultLifecycleObserver {
+            override fun onPause(owner: LifecycleOwner) {
+                exo.pause()
+            }
+            
+            override fun onResume(owner: LifecycleOwner) {
+                if (durationMs > 0) {
+                    // Force surface recreation by clearing and re-setting media item
+                    exo.clearMediaItems()
+                    applyClip()
+                    if (!paused) {
+                        exo.play()
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
+        
+        onDispose { 
+            lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
+            exo.release() 
+        }
+    }
 }
 
 // ===== PREVIEWS DEL MEDIA CAMERA CONTENT =====
