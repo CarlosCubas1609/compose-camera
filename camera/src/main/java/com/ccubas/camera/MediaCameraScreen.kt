@@ -35,6 +35,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -610,6 +612,23 @@ private fun VideoReviewOverlay(
     }
 
     LaunchedEffect(range) { if (durationMs > 0) applyClip() }
+
+    // Lifecycle observer to handle pause/resume
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        val lifecycleObserver = object : DefaultLifecycleObserver {
+            override fun onPause(owner: LifecycleOwner) {
+                exo.pause()
+            }
+            
+            override fun onResume(owner: LifecycleOwner) {
+                if (durationMs > 0 && !paused) {
+                    exo.play()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
+    }
 
     // loop within the range
     LaunchedEffect(range, paused) {
