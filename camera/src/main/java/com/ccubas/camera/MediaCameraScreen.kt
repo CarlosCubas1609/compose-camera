@@ -621,69 +621,66 @@ private fun VideoReviewOverlay(
         }
     }
 
-    Surface(Modifier.fillMaxSize(), color = Color.Black.copy(alpha = .75f)) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black)     // <- opaque
-                .zIndex(2f)                  // <- above the camera
-                .systemBarsPadding()
-        ) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)     // <- opaque
+            .zIndex(2f)                  // <- above the camera
+            .systemBarsPadding()
+    ) {
 
-            Column(Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxSize()
-                .padding(16.dp)) {
-                AndroidView(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1F)
-                        .fillMaxHeight(0.85f),
-                    factory = { c ->
-                        PlayerView(c).apply {
-                            player = exo
+        Column(Modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxSize()
+            .padding(16.dp)) {
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1F)
+                    .fillMaxHeight(0.85f),
+                factory = { c ->
+                    PlayerView(c).apply {
+                        player = exo
 
-                            setShowFastForwardButton(false)
-                            setShowRewindButton(false)
-                            setShowNextButton(false)
-                            setShowPreviousButton(false)
-                            setShowSubtitleButton(false)
-                            setShowShuffleButton(false)
+                        setShowFastForwardButton(false)
+                        setShowRewindButton(false)
+                        setShowNextButton(false)
+                        setShowPreviousButton(false)
+                        setShowSubtitleButton(false)
+                        setShowShuffleButton(false)
 
-                            findViewById<View>(androidx.media3.ui.R.id.exo_settings)?.isVisible = false
-                        }
+                        findViewById<View>(androidx.media3.ui.R.id.exo_settings)?.isVisible = false
                     }
-                )
-
-                RangeSlider(
-                    value = range,
-                    onValueChange = { r ->
-                        val s = r.start.coerceIn(0f, vMax)
-                        val e = r.endInclusive.coerceIn(0f, vMax)
-                        range = min(s, e)..max(s, e)
-                    },
-                    valueRange = 0f..vMax
-                )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    Button(onClick = {
-                        onSaveTrim(
-                            (range.start * 1000).toLong(),
-                            (range.endInclusive * 1000).toLong()
-                        )
-                    }) { Text("Usar") }
                 }
-            }
+            )
 
-            IconButton(onClick = onClose, modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(8.dp)
-                .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-            ) {
-                Icon(Icons.Outlined.Close, null, tint = Color.White)
+            RangeSlider(
+                value = range,
+                onValueChange = { r ->
+                    val s = r.start.coerceIn(0f, vMax)
+                    val e = r.endInclusive.coerceIn(0f, vMax)
+                    range = min(s, e)..max(s, e)
+                },
+                valueRange = 0f..vMax
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Button(onClick = {
+                    onSaveTrim(
+                        (range.start * 1000).toLong(),
+                        (range.endInclusive * 1000).toLong()
+                    )
+                }) { Text("Usar") }
             }
         }
-    }
 
+        IconButton(onClick = onClose, modifier = Modifier
+            .align(Alignment.TopStart)
+            .padding(8.dp)
+            .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+        ) {
+            Icon(Icons.Outlined.Close, null, tint = Color.White)
+        }
+    }
     DisposableEffect(Unit) { onDispose { exo.release() } }
 }
 
