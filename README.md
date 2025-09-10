@@ -245,8 +245,7 @@ SOFTWARE.
 - Jetpack Compose team for the amazing UI toolkit
 
 ### Demo
-![Demo 1](docs/giffs/giff_1.mp4)
-![Demo 2](docs/giffs/giff_2.mp4)
+![Demo](docs/gif/gif.gif)
 
 ---
 
