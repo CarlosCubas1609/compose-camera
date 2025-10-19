@@ -5,12 +5,16 @@ import android.annotation.SuppressLint
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.MediaCodec
+import java.io.FileOutputStream
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.util.Log
@@ -72,7 +76,7 @@ data class UiState(
     val gallery: List<Thumb> = emptyList(),
     val selected: List<Uri> = emptyList(),
     val previewVideo: Uri? = null,
-    val previewImage: Uri? = null,
+    val previewImage: Bitmap? = null,
     val isPreviewingFromCarousel: Boolean = false,
     val config: MediaCameraConfig = MediaCameraConfig(),
     val longPressingToRecord: Boolean = false,
@@ -123,7 +127,7 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
             stopTimer()
         }
         _ui.value.previewVideo?.let { deleteTempFile(it) }
-        _ui.value.previewImage?.let { deleteTempFile(it) }
+        _ui.value.previewImage?.recycle() // Recycle bitmap instead of deleting file
         setLongPressingToRecord(false)
         _ui.update { it.copy(
             mode = m,
@@ -596,7 +600,20 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
         if (isVideo) {
             _ui.update { it.copy(previewVideo = uri, isPreviewingFromCarousel = true) }
         } else {
-            _ui.update { it.copy(previewImage = uri, isPreviewingFromCarousel = true) }
+            // Load image from Uri as Bitmap
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val inputStream = app.contentResolver.openInputStream(uri)
+                    val bitmap = BitmapFactory.decodeStream(inputStream)
+                    inputStream?.close()
+
+                    withContext(Dispatchers.Main) {
+                        _ui.update { it.copy(previewImage = bitmap, isPreviewingFromCarousel = true) }
+                    }
+                } catch (e: Exception) {
+                    Log.e("MediaCamera", "Error loading image from carousel", e)
+                }
+            }
         }
     }
 
@@ -637,23 +654,44 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
     }
 
     /**
-     * Captures a photo and saves it to a temporary file.
+     * Captures a photo and keeps it in memory as a Bitmap.
      *
      * @param controller The camera controller.
      * @param executor The executor to use for the capture callback.
      */
     fun capturePhoto(controller: LifecycleCameraController, executor: Executor) {
-        val tempFile = File(app.cacheDir, "PHOTO_${System.currentTimeMillis()}.jpg")
-        val opts = ImageCapture.OutputFileOptions.Builder(tempFile).build()
-
-        controller.takePicture(opts, executor, object : ImageCapture.OnImageSavedCallback {
+        controller.takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
             override fun onError(exc: ImageCaptureException) {
                 Log.e("MediaCamera", "Photo capture failed: ${exc.message}", exc)
             }
-            override fun onImageSaved(res: ImageCapture.OutputFileResults) {
-                val uri = res.savedUri ?: Uri.fromFile(tempFile)
-                tempUris.add(uri)
-                _ui.update { it.copy(previewImage = uri) }
+
+            override fun onCaptureSuccess(imageProxy: androidx.camera.core.ImageProxy) {
+                try {
+                    // Convert ImageProxy to Bitmap
+                    val buffer = imageProxy.planes[0].buffer
+                    val bytes = ByteArray(buffer.remaining())
+                    buffer.get(bytes)
+
+                    var bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+
+                    // Compress if too large (> 5MB in memory)
+                    val maxDimension = 2048
+                    if (bitmap.width > maxDimension || bitmap.height > maxDimension) {
+                        val scale = minOf(
+                            maxDimension.toFloat() / bitmap.width,
+                            maxDimension.toFloat() / bitmap.height
+                        )
+                        val newWidth = (bitmap.width * scale).toInt()
+                        val newHeight = (bitmap.height * scale).toInt()
+                        bitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+                    }
+
+                    _ui.update { it.copy(previewImage = bitmap) }
+                } catch (e: Exception) {
+                    Log.e("MediaCamera", "Error processing captured image", e)
+                } finally {
+                    imageProxy.close()
+                }
             }
         })
     }
@@ -706,13 +744,13 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
     }
 
     /**
-     * Dismisses the image preview.
+     * Dismisses the image preview and clears the bitmap from memory.
      */
     fun dismissImagePreview() {
         val ui = _ui.value
-        if (!ui.isPreviewingFromCarousel) {
-            ui.previewImage?.let { deleteTempFile(it) }
-        }
+        // Bitmap is automatically garbage collected, no need to manually delete
+        // Recycle bitmap if needed for immediate memory release
+        ui.previewImage?.recycle()
         _ui.update { it.copy(previewImage = null, isPreviewingFromCarousel = false) }
     }
 
@@ -742,7 +780,7 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
      * @param isVideo Whether the file is a video.
      * @return The URI of the new file in the MediaStore, or null on failure.
      */
-    suspend fun saveToMediaStore(tempFileUri: Uri, isVideo: Boolean): Uri? = withContext(Dispatchers.IO) {
+    suspend fun saveToMediaStore(tempFileUri: Uri, isVideo: Boolean, customDir: String? = null): Uri? = withContext(Dispatchers.IO) {
         val resolver = app.contentResolver
         val mediaStoreUri = if (isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val extension = if (isVideo) "mp4" else "jpg"
@@ -754,6 +792,9 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
             put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
+                // Set custom directory if provided, otherwise use default (Pictures/Movies)
+                val relativePath = customDir ?: if (isVideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
+                put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
             }
         }
 
@@ -887,26 +928,57 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
         }
 
     /**
-     * Processes a captured image, either saving it to the MediaStore or providing the temporary URI.
+     * Processes a captured/edited image bitmap, optionally invoking bitmap callback,
+     * and saving it to file/MediaStore if needed.
      *
-     * @param tempUri The URI of the temporary image file.
-     * @param onDone Callback with the final URI of the image.
+     * @param bitmap The bitmap to save.
+     * @param onDone Callback with the final URI of the image (null if only bitmap callback used).
      */
-    fun saveImageAndSend(tempUri: Uri, onDone: (Uri?) -> Unit) {
+    fun saveImageAndSend(bitmap: Bitmap, onDone: (Uri?) -> Unit) {
         val config = _ui.value.config
 
-        if (!config.saveToMediaStore) {
-            // Don't save to MediaStore, use temporary/original URI.
-            // The file is removed from the cleanup list so it's not deleted on close.
-            // The library user is responsible for managing this file.
-            tempUris.remove(tempUri)
-            onDone(tempUri)
-        } else {
-            // Save a copy to MediaStore
-            viewModelScope.launch(Dispatchers.IO) {
-                val permanentUri = saveToMediaStore(tempUri, isVideo = false)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // First, invoke bitmap callback if provided
+                config.onBitmapCaptured?.let { callback ->
+                    withContext(Dispatchers.Main) {
+                        callback(bitmap)
+                    }
+                }
+
+                // Save bitmap to file (temporary or permanent depending on config)
+                val timestamp = System.currentTimeMillis()
+                val file = if (config.saveToMediaStore) {
+                    // Temporary file, will be copied to MediaStore then deleted
+                    File(app.cacheDir, "IMG_$timestamp.jpg")
+                } else {
+                    // Permanent file in filesDir for client
+                    File(app.filesDir, "IMG_$timestamp.jpg")
+                }
+
+                FileOutputStream(file).use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                }
+                val fileUri = Uri.fromFile(file)
+
+                if (!config.saveToMediaStore) {
+                    // Return URI to permanent file in filesDir
+                    withContext(Dispatchers.Main) {
+                        onDone(fileUri)
+                    }
+                } else {
+                    // Save a copy to MediaStore with optional custom directory
+                    val permanentUri = saveToMediaStore(fileUri, isVideo = false, customDir = config.customSaveDirectory)
+                    // Delete temporary file after saving to MediaStore
+                    file.delete()
+                    withContext(Dispatchers.Main) {
+                        onDone(permanentUri)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MediaCamera", "Error saving bitmap", e)
                 withContext(Dispatchers.Main) {
-                    onDone(permanentUri)
+                    onDone(null)
                 }
             }
         }
@@ -948,7 +1020,7 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
             fastTrim(src, startUs, endUs) { tempUri ->
                 if (tempUri != null) {
                     viewModelScope.launch(Dispatchers.IO) {
-                        val permanentUri = saveToMediaStore(tempUri, isVideo = true)
+                        val permanentUri = saveToMediaStore(tempUri, isVideo = true, customDir = config.customSaveDirectory)
                         withContext(Dispatchers.Main) {
                             onDone(permanentUri)
                         }
