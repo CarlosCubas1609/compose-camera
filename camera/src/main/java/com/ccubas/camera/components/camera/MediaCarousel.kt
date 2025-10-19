@@ -43,6 +43,7 @@ fun MediaCarousel(
     thumbnails: List<MediaThumbnail> = emptyList(),
     selectedUris: List<Uri> = emptyList(),
     imageLoader: ImageLoader,
+    isLoading: Boolean = false,
     onItemClick: (Uri, Boolean) -> Unit = { _, _ -> },
     onItemLongClick: (Uri) -> Unit = {},
     onSwipeUp: () -> Unit = {}
@@ -54,34 +55,46 @@ fun MediaCarousel(
             .fillMaxWidth()
             .height(76.dp)
     ) {
-        LazyRow(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectVerticalDragGestures { _, drag ->
-                        if (drag < -swipeUpThreshold) {
-                            onSwipeUp()
-                        }
-                    }
-                }
-                .padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            contentPadding = PaddingValues(end = 8.dp)
-        ) {
-            itemsIndexed(
-                items = thumbnails,
-                key = { _, thumbnail -> thumbnail.uri.toString() }
-            ) { _, thumbnail ->
-                MediaThumbnailItem(
-                    thumbnail = thumbnail,
-                    isSelected = thumbnail.uri in selectedUris,
-                    imageLoader = imageLoader,
-                    onClick = { onItemClick(thumbnail.uri, thumbnail.isVideo) },
-                    onLongClick = { onItemLongClick(thumbnail.uri) }
+        if (isLoading && thumbnails.isEmpty()) {
+            // Show loading indicator when initially loading
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(32.dp),
+                    color = Color.White
                 )
             }
+        } else {
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures { _, drag ->
+                            if (drag < -swipeUpThreshold) {
+                                onSwipeUp()
+                            }
+                        }
+                    }
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = PaddingValues(end = 8.dp)
+            ) {
+                itemsIndexed(
+                    items = thumbnails,
+                    key = { _, thumbnail -> thumbnail.uri.toString() }
+                ) { _, thumbnail ->
+                    MediaThumbnailItem(
+                        thumbnail = thumbnail,
+                        isSelected = thumbnail.uri in selectedUris,
+                        imageLoader = imageLoader,
+                        onClick = { onItemClick(thumbnail.uri, thumbnail.isVideo) },
+                        onLongClick = { onItemLongClick(thumbnail.uri) }
+                    )
+                }
+            }
         }
-
     }
 }
 
@@ -95,7 +108,7 @@ private fun MediaThumbnailItem(
     onLongClick: () -> Unit
 ) {
     val ctx = LocalContext.current
-    
+
     val request = if (thumbnail.isVideo) {
         ImageRequest.Builder(ctx)
             .data(thumbnail.uri)
@@ -104,9 +117,15 @@ private fun MediaThumbnailItem(
                 VideoFrameDecoder.VIDEO_FRAME_OPTION_KEY,
                 MediaMetadataRetriever.OPTION_CLOSEST_SYNC
             )
+            .crossfade(true)
+            .memoryCacheKey(thumbnail.uri.toString())
             .build()
     } else {
-        ImageRequest.Builder(ctx).data(thumbnail.uri).build()
+        ImageRequest.Builder(ctx)
+            .data(thumbnail.uri)
+            .crossfade(true)
+            .memoryCacheKey(thumbnail.uri.toString())
+            .build()
     }
 
     Box(
@@ -126,10 +145,10 @@ private fun MediaThumbnailItem(
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
-        
+
         if (thumbnail.isVideo) {
             Icon(
-                Icons.Outlined.Videocam, 
+                Icons.Outlined.Videocam,
                 null,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -138,7 +157,7 @@ private fun MediaThumbnailItem(
                 tint = Color.White
             )
         }
-        
+
         if (isSelected) {
             Box(
                 Modifier

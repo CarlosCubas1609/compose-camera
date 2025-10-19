@@ -28,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -444,22 +445,33 @@ fun ImageCropper(
 }
 
 /**
- * A full-screen composable for cropping an image.
+ * A full-screen composable for cropping an image (Bitmap version).
  *
- * @param src The URI of the source image to crop.
+ * @param src The Bitmap of the source image to crop.
  * @param onCancel Callback invoked when the user cancels the crop operation.
- * @param onCropped Callback invoked with the URI of the cropped image when the user confirms.
+ * @param onCropped Callback invoked with the Bitmap of the cropped image when the user confirms.
  * @param aspect The fixed aspect ratio to use for cropping, or null for freeform.
  */
 @Composable
 fun CropperFullScreen(
-    src: Uri,
+    src: Bitmap,
     onCancel: () -> Unit,
-    onCropped: (Uri) -> Unit,
+    onCropped: (Bitmap) -> Unit,
     aspect: Float? = null
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val state = rememberCropperState(imageUri = src, aspectRatio = aspect)
+
+    // Create temporary Uri from Bitmap to pass to existing cropper state
+    val tempUri = remember(src) {
+        val tempFile = File(context.cacheDir, "crop_temp_${System.currentTimeMillis()}.jpg")
+        FileOutputStream(tempFile).use { out ->
+            src.compress(Bitmap.CompressFormat.JPEG, 95, out)
+        }
+        Uri.fromFile(tempFile)
+    }
+
+    val state = rememberCropperState(imageUri = tempUri, aspectRatio = aspect)
     BackHandler(enabled = true) { /* block back press */ }
 
     Box(
@@ -489,7 +501,21 @@ fun CropperFullScreen(
                 .padding(16.dp)
         ) {
             Button(onClick = {
-                scope.launch { state.crop()?.let(onCropped) }
+                scope.launch {
+                    val croppedUri = state.crop()
+                    if (croppedUri != null) {
+                        // Convert cropped Uri back to Bitmap
+                        val inputStream = context.contentResolver.openInputStream(croppedUri)
+                        val croppedBitmap = BitmapFactory.decodeStream(inputStream)
+                        inputStream?.close()
+
+                        // Delete temp files
+                        File(tempUri.path!!).delete()
+                        File(croppedUri.path!!).delete()
+
+                        onCropped(croppedBitmap)
+                    }
+                }
             }) {
                 Text("Usar")
                 Spacer(Modifier.width(8.dp))

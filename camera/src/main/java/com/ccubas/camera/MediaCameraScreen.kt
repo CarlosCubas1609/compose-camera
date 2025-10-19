@@ -2,6 +2,7 @@ package com.ccubas.camera
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.view.View
 import androidx.camera.core.*
@@ -50,6 +51,7 @@ import coil.request.ImageRequest
 import com.ccubas.camera.components.*
 import com.ccubas.camera.components.camera.CameraControls
 import com.ccubas.camera.components.camera.CameraTopBar
+import com.ccubas.camera.components.camera.ImageReviewWithCropOverlay
 import com.ccubas.camera.components.camera.MediaCarousel
 import com.ccubas.camera.components.camera.MediaGallery
 import com.ccubas.camera.components.camera.MediaThumbnail
@@ -75,8 +77,11 @@ data class MediaCameraUIState(
     val selected: List<Uri> = emptyList(),
     val config: MediaCameraConfig = MediaCameraConfig(),
     val gallery: List<MediaThumbnail> = emptyList(),
-    val previewImage: Uri? = null,
-    val previewVideo: Uri? = null
+    val previewImage: Bitmap? = null,
+    val previewVideo: Uri? = null,
+    val isLoadingGallery: Boolean = false,
+    val isLoadingThumbs: Boolean = false,
+    val galleryFilter: MediaType = MediaType.BOTH
 )
 
 /**
@@ -102,8 +107,10 @@ fun MediaCameraContent(
     onDismissGallery: () -> Unit = {},
     onToggleSelect: (Uri) -> Unit = {},
     onSendSelection: (List<Uri>) -> Unit = {},
+    onLoadMoreGallery: () -> Unit = {},
+    onFilterChange: (MediaType) -> Unit = {},
     onImagePreviewClose: () -> Unit = {},
-    onImagePreviewUse: (Uri) -> Unit = {},
+    onImagePreviewUse: (Bitmap) -> Unit = {},
     onVideoPreviewClose: () -> Unit = {},
     onVideoPreviewSave: (Long, Long) -> Unit = { _, _ -> },
     cameraPreviewContent: @Composable () -> Unit = {
@@ -151,6 +158,7 @@ fun MediaCameraContent(
                     thumbnails = ui.thumbs,
                     selectedUris = ui.selected,
                     imageLoader = imageLoader,
+                    isLoading = ui.isLoadingThumbs,
                     onItemClick = onItemClick,
                     onItemLongClick = onItemLongClick,
                     onSwipeUp = onSwipeUp
@@ -187,14 +195,18 @@ fun MediaCameraContent(
                 selectedUris = ui.selected,
                 config = ui.config,
                 imageLoader = imageLoader,
+                isLoading = ui.isLoadingGallery,
+                currentFilter = ui.galleryFilter,
                 onDismiss = onDismissGallery,
+                onFilterChange = onFilterChange,
                 onToggleSelect = onToggleSelect,
-                onSendSelection = onSendSelection
+                onSendSelection = onSendSelection,
+                onLoadMore = onLoadMoreGallery
             )
         }
 
         // Preview of the recently taken photo
-        ui.previewImage?.let { src ->
+        ui.previewImage?.let { src: Bitmap ->
             ImageReviewWithCropOverlay(
                 src = src,
                 onClose = onImagePreviewClose,
@@ -276,9 +288,13 @@ fun MediaCameraScreen(
     val ui by vm.ui.collectAsState()
 
     val imageLoader = remember {
-        ImageLoader.Builder(ctx).components {
-            add(VideoFrameDecoder.Factory())
-        }.build()
+        ImageLoader.Builder(ctx)
+            .components {
+                add(VideoFrameDecoder.Factory())
+            }
+            .crossfade(true)
+            .respectCacheHeaders(false)
+            .build()
     }
 
     LaunchedEffect(Unit) { vm.loadThumbs() }
@@ -409,7 +425,10 @@ fun MediaCameraScreen(
             config = ui.config,
             gallery = ui.gallery.map { MediaThumbnail(it.uri, it.isVideo) },
             previewImage = ui.previewImage,
-            previewVideo = ui.previewVideo
+            previewVideo = ui.previewVideo,
+            isLoadingGallery = ui.isLoadingGallery,
+            isLoadingThumbs = ui.isLoadingThumbs,
+            galleryFilter = ui.galleryFilter
         ),
         imageLoader = imageLoader,
         shutterModifier = shutterModifier,
@@ -441,9 +460,11 @@ fun MediaCameraScreen(
             sendUris(uris)
             showGallery = false
         },
+        onLoadMoreGallery = { vm.loadMoreGallery() },
+        onFilterChange = { filter -> vm.setGalleryFilter(filter) },
         onImagePreviewClose = { vm.dismissImagePreview() },
-        onImagePreviewUse = { croppedUri ->
-            vm.saveImageAndSend(croppedUri) { permanentUri ->
+        onImagePreviewUse = { croppedBitmap ->
+            vm.saveImageAndSend(croppedBitmap) { permanentUri ->
                 if (permanentUri != null) {
                     sendUris(listOf(permanentUri))
                 } else {
@@ -484,79 +505,7 @@ fun MediaCameraScreen(
     }
 }
 
-/**
- * A private composable for reviewing and cropping a captured image.
- *
- * @param src The URI of the image to review.
- * @param onClose Callback invoked when the user closes the review overlay.
- * @param onUse Callback invoked when the user confirms using the (potentially cropped) image.
- * @param aspect The fixed aspect ratio to use for cropping, or null for freeform.
- */
-@Composable
-private fun ImageReviewWithCropOverlay(
-    src: Uri,
-    onClose: () -> Unit,
-    onUse: (Uri) -> Unit,
-    aspect: Float? = null
-) {
-    var showCropper by remember { mutableStateOf(false) }
-
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .systemBarsPadding()
-            .zIndex(2f)
-    ) {
-        // Simple preview (without cropping)
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current).data(src).build(),
-            contentDescription = null,
-            modifier = Modifier
-                .fillMaxSize(),
-            contentScale = ContentScale.Fit
-        )
-
-        // Top: close / crop
-        Row(
-            Modifier
-                .align(Alignment.TopStart)
-                .padding(8.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            IconButton(onClick = onClose, modifier = Modifier.background(Color.Black.copy(alpha = 0.4f), CircleShape)) {
-                Icon(Icons.Outlined.Close, null, tint = Color.White)
-            }
-            IconButton(onClick = { showCropper = true }, modifier = Modifier.background(Color.Black.copy(alpha = 0.4f), CircleShape)) {
-                Icon(Icons.Outlined.Crop, null, tint = Color.White)
-            }
-        }
-
-        // Bottom: use (original by default)
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp)
-        ) {
-            Button(onClick = { onUse(src) }) {
-                Text("Usar foto")
-                Spacer(Modifier.width(8.dp))
-                Icon(Icons.Outlined.Check, null)
-            }
-        }
-    }
-
-    // Full-screen modal cropper (locked)
-    if (showCropper) {
-        CropperFullScreen(
-            src = src,
-            onCancel = { showCropper = false },
-            onCropped = { uri -> onUse(uri) },
-            aspect = aspect
-        )
-    }
-}
+// Moved to ImageReview.kt component file (now uses Bitmap instead of Uri)
 
 /**
  * A private composable for reviewing and trimming a captured video.

@@ -1,5 +1,6 @@
 package com.ccubas.camera.components.camera
 
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -25,9 +26,9 @@ import com.ccubas.camera.components.CropperFullScreen
 
 @Composable
 fun ImageReviewWithCropOverlay(
-    src: Uri,
+    src: Bitmap,
     onClose: () -> Unit = {},
-    onUse: (Uri) -> Unit = {},
+    onUse: (Bitmap) -> Unit = {},
     aspect: Float? = null
 ) {
     var showCropper by remember { mutableStateOf(false) }
@@ -89,36 +90,38 @@ fun ImageReviewWithCropOverlay(
         CropperFullScreen(
             src = src,
             onCancel = { showCropper = false },
-            onCropped = { uri -> onUse(uri) },
+            onCropped = { bitmap -> onUse(bitmap) },
             aspect = aspect
         )
     }
 }
 
-@Preview(showBackground = true, widthDp = 400, heightDp = 600)
-@Composable
-fun ImageReviewPreview() {
-    ImageReviewWithCropOverlay(
-        src = "content://media/sample_image.jpg".toUri(),
-        onClose = {},
-        onUse = {}
-    )
-}
+// Preview disabled - requires actual Bitmap
+// @Preview(showBackground = true, widthDp = 400, heightDp = 600)
+// @Composable
+// fun ImageReviewPreview() {
+//     ImageReviewWithCropOverlay(
+//         src = "content://media/sample_image.jpg".toUri(),
+//         onClose = {},
+//         onUse = {}
+//     )
+// }
 
-@Preview(showBackground = true, widthDp = 400, heightDp = 600)
-@Composable
-fun ImageReviewWithCropperPreview() {
-    var showCropper by remember { mutableStateOf(true) }
-    
-    Box(modifier = Modifier.fillMaxSize()) {
-        ImageReviewWithCropOverlay(
-            src = "content://media/sample_image.jpg".toUri(),
-            onClose = {},
-            onUse = {}
-        )
-        
-        // Mock cropper overlay for preview
-        if (showCropper) {
+// Preview disabled - requires actual Bitmap
+// @Preview(showBackground = true, widthDp = 400, heightDp = 600)
+// @Composable
+// fun ImageReviewWithCropperPreview() {
+//     var showCropper by remember { mutableStateOf(true) }
+//
+//     Box(modifier = Modifier.fillMaxSize()) {
+//         ImageReviewWithCropOverlay(
+//             src = "content://media/sample_image.jpg".toUri(),
+//             onClose = {},
+//             onUse = {}
+//         )
+//
+//         // Mock cropper overlay for preview
+/*        if (showCropper) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
                 color = Color.Black.copy(alpha = 0.7f)
@@ -135,5 +138,5 @@ fun ImageReviewWithCropperPreview() {
                 }
             }
         }
-    }
-}
+    }*/ // End commented preview
+// } // End ImageReviewWithCropperPreview

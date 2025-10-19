@@ -146,14 +146,14 @@ fun MediaCameraScreenPreview(
             )
         }
 
-        // IMAGE REVIEW
-        if (showImageReview) {
-            ImageReviewWithCropOverlay(
-                src = "content://media/sample_image.jpg".toUri(),
-                onClose = { },
-                onUse = { }
-            )
-        }
+        // IMAGE REVIEW (disabled - requires actual Bitmap)
+//        if (showImageReview) {
+//            ImageReviewWithCropOverlay(
+//                src = "content://media/sample_image.jpg".toUri(),
+//                onClose = { },
+//                onUse = { }
+//            )
+//        }
 
         // VIDEO REVIEW
         if (showVideoReview) {

@@ -53,14 +53,14 @@ fun PreviewComponentsDemo() {
         )
     }
 
-    // Image Review Overlay
-    if (showImageReview) {
-        ImageReviewWithCropOverlay(
-            src = "content://media/sample_image.jpg".toUri(),
-            onClose = { showImageReview = false },
-            onUse = { showImageReview = false }
-        )
-    }
+    // Image Review Overlay (disabled - requires actual Bitmap)
+//    if (showImageReview) {
+//        ImageReviewWithCropOverlay(
+//            src = "content://media/sample_image.jpg".toUri(),
+//            onClose = { showImageReview = false },
+//            onUse = { showImageReview = false }
+//        )
+//    }
 
     // Video Review Overlay
     if (showVideoReview) {
