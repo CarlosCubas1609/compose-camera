@@ -7,6 +7,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.media.MediaCodec
 import java.io.FileOutputStream
 import android.media.MediaExtractor
@@ -667,26 +668,32 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
 
             override fun onCaptureSuccess(imageProxy: androidx.camera.core.ImageProxy) {
                 try {
-                    // Convert ImageProxy to Bitmap
                     val buffer = imageProxy.planes[0].buffer
                     val bytes = ByteArray(buffer.remaining())
                     buffer.get(bytes)
 
-                    var bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    val originalBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+
+                    // Get rotation degrees
+                    val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+                    val matrix = android.graphics.Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+                    var rotatedBitmap = Bitmap.createBitmap(
+                        originalBitmap, 0, 0, originalBitmap.width, originalBitmap.height, matrix, true
+                    )
 
                     // Compress if too large (> 5MB in memory)
                     val maxDimension = 2048
-                    if (bitmap.width > maxDimension || bitmap.height > maxDimension) {
+                    if (rotatedBitmap.width > maxDimension || rotatedBitmap.height > maxDimension) {
                         val scale = minOf(
-                            maxDimension.toFloat() / bitmap.width,
-                            maxDimension.toFloat() / bitmap.height
+                            maxDimension.toFloat() / rotatedBitmap.width,
+                            maxDimension.toFloat() / rotatedBitmap.height
                         )
-                        val newWidth = (bitmap.width * scale).toInt()
-                        val newHeight = (bitmap.height * scale).toInt()
-                        bitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+                        val newWidth = (rotatedBitmap.width * scale).toInt()
+                        val newHeight = (rotatedBitmap.height * scale).toInt()
+                        rotatedBitmap = Bitmap.createScaledBitmap(rotatedBitmap, newWidth, newHeight, true)
                     }
 
-                    _ui.update { it.copy(previewImage = bitmap) }
+                    _ui.update { it.copy(previewImage = rotatedBitmap) }
                 } catch (e: Exception) {
                     Log.e("MediaCamera", "Error processing captured image", e)
                 } finally {
