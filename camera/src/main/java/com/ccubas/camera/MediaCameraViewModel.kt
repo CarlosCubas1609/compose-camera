@@ -76,7 +76,10 @@ data class UiState(
     val isPreviewingFromCarousel: Boolean = false,
     val config: MediaCameraConfig = MediaCameraConfig(),
     val longPressingToRecord: Boolean = false,
-    val zoomRatio: Float = 1f
+    val zoomRatio: Float = 1f,
+    val isLoadingGallery: Boolean = false,
+    val isLoadingThumbs: Boolean = false,
+    val galleryFilter: MediaType = MediaType.BOTH
 )
 
 /**
@@ -159,26 +162,320 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
      */
     fun isRecording() = recording != null
 
+    private var currentGalleryOffset = 0
+    private val galleryPageSize = 30 // Load 30 items at a time
+
     /**
      * Loads a limited number of media thumbnails for the carousel.
      *
      * @param limit The maximum number of thumbnails to load.
      */
     fun loadThumbs(limit: Int = 12) = viewModelScope.launch(Dispatchers.IO) {
-        _ui.update { it.copy(thumbs = queryMedia(limit)) }
+        Log.d("MediaCamera", "loadThumbs: Starting with limit=$limit")
+        _ui.update { it.copy(isLoadingThumbs = true) }
+        val thumbs = queryMediaPaged(limit, 0)
+        Log.d("MediaCamera", "loadThumbs: Loaded ${thumbs.size} thumbs")
+        _ui.update { it.copy(thumbs = thumbs, isLoadingThumbs = false) }
     }
 
     /**
-     * Loads a larger number of media items for the main gallery view.
-     *
-     * @param max The maximum number of media items to load.
+     * Loads initial page of gallery items (fast first load).
      */
-    fun loadGallery(max: Int = 300) = viewModelScope.launch(Dispatchers.IO) {
-        _ui.update { it.copy(gallery = queryMedia(max)) }
+    fun loadGallery() = viewModelScope.launch(Dispatchers.IO) {
+        Log.d("MediaCamera", "loadGallery: Starting initial load")
+        _ui.update { it.copy(isLoadingGallery = true) }
+        currentGalleryOffset = 0
+        val gallery = queryMediaPaged(galleryPageSize, currentGalleryOffset, _ui.value.galleryFilter)
+        Log.d("MediaCamera", "loadGallery: Loaded ${gallery.size} items, updating offset to $galleryPageSize")
+        currentGalleryOffset += galleryPageSize
+        _ui.update { it.copy(gallery = gallery, isLoadingGallery = false) }
     }
 
     /**
-     * Queries the [MediaStore] for images and videos.
+     * Loads next page of gallery items when user scrolls.
+     */
+    fun loadMoreGallery() = viewModelScope.launch(Dispatchers.IO) {
+        if (_ui.value.isLoadingGallery) {
+            Log.d("MediaCamera", "loadMoreGallery: Already loading, skipping")
+            return@launch
+        }
+
+        Log.d("MediaCamera", "loadMoreGallery: Loading more from offset=$currentGalleryOffset")
+        _ui.update { it.copy(isLoadingGallery = true) }
+        val newItems = queryMediaPaged(galleryPageSize, currentGalleryOffset, _ui.value.galleryFilter)
+        Log.d("MediaCamera", "loadMoreGallery: Got ${newItems.size} new items")
+        if (newItems.isNotEmpty()) {
+            currentGalleryOffset += galleryPageSize
+            val updatedGallery = _ui.value.gallery + newItems
+            Log.d("MediaCamera", "loadMoreGallery: Total gallery size now: ${updatedGallery.size}, next offset: $currentGalleryOffset")
+            _ui.update { it.copy(gallery = updatedGallery, isLoadingGallery = false) }
+        } else {
+            Log.d("MediaCamera", "loadMoreGallery: No more items to load")
+            _ui.update { it.copy(isLoadingGallery = false) }
+        }
+    }
+
+    /**
+     * Changes the gallery filter and reloads the gallery from the beginning.
+     */
+    fun setGalleryFilter(filter: MediaType) = viewModelScope.launch(Dispatchers.IO) {
+        Log.d("MediaCamera", "setGalleryFilter: Changing filter to $filter")
+        _ui.update { it.copy(galleryFilter = filter, isLoadingGallery = true) }
+        currentGalleryOffset = 0
+        val gallery = queryMediaPaged(galleryPageSize, currentGalleryOffset, filter)
+        Log.d("MediaCamera", "setGalleryFilter: Loaded ${gallery.size} items with new filter")
+        currentGalleryOffset += galleryPageSize
+        _ui.update { it.copy(gallery = gallery, isLoadingGallery = false) }
+    }
+
+    /**
+     * Queries the [MediaStore] with pagination and file validation.
+     * Loads more items than needed to compensate for filtered invalid files.
+     *
+     * @param limit Number of items to fetch in this page.
+     * @param offset Starting position for this page.
+     * @param mediaTypeFilter Optional filter to override the config mediaType (for gallery filtering).
+     * @return A list of [Thumb] objects.
+     */
+    private fun queryMediaPaged(limit: Int, offset: Int, mediaTypeFilter: MediaType? = null): List<Thumb> {
+        Log.d("MediaCamera", "queryMediaPaged: limit=$limit, offset=$offset, filter=$mediaTypeFilter")
+        val cr = app.contentResolver
+        val config = _ui.value.config
+        val mediaType = mediaTypeFilter ?: config.mediaType
+
+        fun q(uri: Uri, idCol: String, dateCol: String, isVideo: Boolean) = buildList<Thumb> {
+            try {
+                val projection = arrayOf(idCol, dateCol, MediaStore.MediaColumns.DATA)
+                val sortOrder = "$dateCol DESC"
+                Log.d("MediaCamera", "queryMediaPaged: Querying ${if (isVideo) "videos" else "images"}")
+
+                cr.query(uri, projection, null, null, sortOrder)?.use { c ->
+                    val cursorSize = c.count
+                    Log.d("MediaCamera", "queryMediaPaged: Cursor size for ${if (isVideo) "videos" else "images"}: $cursorSize")
+
+                    val iId = c.getColumnIndexOrThrow(idCol)
+                    val iDt = c.getColumnIndexOrThrow(dateCol)
+                    val iData = c.getColumnIndex(MediaStore.MediaColumns.DATA)
+
+                    var currentIndex = 0
+                    var validCount = 0
+
+                    while (c.moveToNext() && validCount < limit) {
+                        // Skip items before offset
+                        if (currentIndex < offset) {
+                            currentIndex++
+                            continue
+                        }
+
+                        try {
+                            val id = c.getLong(iId)
+                            val dt = c.getLong(iDt)
+
+                            // Quick file existence check
+                            var fileExists = true
+                            if (iData >= 0) {
+                                val filePath = c.getString(iData)
+                                if (filePath != null) {
+                                    fileExists = File(filePath).exists()
+                                }
+                            }
+
+                            if (fileExists) {
+                                val u = ContentUris.withAppendedId(uri, id)
+                                add(Thumb(u, isVideo, dt))
+                                validCount++
+                            }
+                            currentIndex++
+                        } catch (e: Exception) {
+                            Log.d("MediaCamera", "Error reading media item: ${e.message}")
+                        }
+                    }
+
+                    Log.d("MediaCamera", "queryMediaPaged: ${if (isVideo) "Videos" else "Images"} - Found: $validCount items")
+                }
+            } catch (e: Exception) {
+                Log.e("MediaCamera", "Error querying media: ${if (isVideo) "videos" else "images"}", e)
+            }
+        }
+
+        val allResults = buildList<Thumb> {
+            when (mediaType) {
+                MediaType.PHOTO_ONLY -> {
+                    val results = q(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED, false)
+                    Log.d("MediaCamera", "queryMediaPaged: PHOTO_ONLY returned ${results.size} items")
+                    addAll(results)
+                }
+                MediaType.VIDEO_ONLY -> {
+                    val results = q(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, MediaStore.Video.Media._ID, MediaStore.Video.Media.DATE_ADDED, true)
+                    Log.d("MediaCamera", "queryMediaPaged: VIDEO_ONLY returned ${results.size} items")
+                    addAll(results)
+                }
+                MediaType.BOTH -> {
+                    // For BOTH, load enough items from each source to ensure we can merge properly
+                    // We estimate needing 2x items to compensate for invalid files and merging
+                    val fetchSize = (offset + limit) * 2
+
+                    val images = buildList<Thumb> {
+                        try {
+                            val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED, MediaStore.MediaColumns.DATA)
+                            val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
+
+                            cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, sortOrder)?.use { c ->
+                                Log.d("MediaCamera", "queryMediaPaged: Images cursor size: ${c.count}")
+                                val iId = c.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                                val iDt = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
+                                val iData = c.getColumnIndex(MediaStore.MediaColumns.DATA)
+
+                                var count = 0
+                                while (c.moveToNext() && count < fetchSize) {
+                                    try {
+                                        val id = c.getLong(iId)
+                                        val dt = c.getLong(iDt)
+                                        var fileExists = true
+                                        if (iData >= 0) {
+                                            val filePath = c.getString(iData)
+                                            if (filePath != null) {
+                                                fileExists = File(filePath).exists()
+                                            }
+                                        }
+                                        if (fileExists) {
+                                            val u = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+                                            add(Thumb(u, false, dt))
+                                            count++
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.d("MediaCamera", "Error reading image: ${e.message}")
+                                    }
+                                }
+                                Log.d("MediaCamera", "queryMediaPaged: Loaded $count valid images")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("MediaCamera", "Error querying images", e)
+                        }
+                    }
+
+                    val videos = buildList<Thumb> {
+                        try {
+                            val projection = arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.DATE_ADDED, MediaStore.MediaColumns.DATA)
+                            val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
+
+                            cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, projection, null, null, sortOrder)?.use { c ->
+                                Log.d("MediaCamera", "queryMediaPaged: Videos cursor size: ${c.count}")
+                                val iId = c.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                                val iDt = c.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
+                                val iData = c.getColumnIndex(MediaStore.MediaColumns.DATA)
+
+                                var count = 0
+                                while (c.moveToNext() && count < fetchSize) {
+                                    try {
+                                        val id = c.getLong(iId)
+                                        val dt = c.getLong(iDt)
+                                        var fileExists = true
+                                        if (iData >= 0) {
+                                            val filePath = c.getString(iData)
+                                            if (filePath != null) {
+                                                fileExists = File(filePath).exists()
+                                            }
+                                        }
+                                        if (fileExists) {
+                                            val u = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
+                                            add(Thumb(u, true, dt))
+                                            count++
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.d("MediaCamera", "Error reading video: ${e.message}")
+                                    }
+                                }
+                                Log.d("MediaCamera", "queryMediaPaged: Loaded $count valid videos")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("MediaCamera", "Error querying videos", e)
+                        }
+                    }
+
+                    Log.d("MediaCamera", "queryMediaPaged: BOTH - Images: ${images.size}, Videos: ${videos.size}")
+                    val merged = (images + videos).sortedByDescending { it.dateAdded }
+                    Log.d("MediaCamera", "queryMediaPaged: Merged total: ${merged.size}")
+                    addAll(merged.drop(offset).take(limit))
+                }
+            }
+        }
+
+        Log.d("MediaCamera", "queryMediaPaged: Final results count: ${allResults.size}")
+        return allResults
+    }
+
+    /**
+     * Queries the [MediaStore] for images and videos WITH file path validation (fast and reliable).
+     * Uses _DATA column to verify file existence without opening file descriptors.
+     *
+     * @param limit The maximum number of items to query.
+     * @return A list of [Thumb] objects.
+     */
+    private fun queryMediaFast(limit: Int): List<Thumb> {
+        val cr = app.contentResolver
+        val config = _ui.value.config
+
+        fun q(uri: Uri, idCol: String, dateCol: String, isVideo: Boolean) = buildList<Pair<Long, Thumb>> {
+            try {
+                // Query with _DATA column to get file paths
+                val projection = arrayOf(idCol, dateCol, MediaStore.MediaColumns.DATA)
+                cr.query(uri, projection, null, null, "$dateCol DESC")?.use { c ->
+                    val iId = c.getColumnIndexOrThrow(idCol)
+                    val iDt = c.getColumnIndexOrThrow(dateCol)
+                    val iData = c.getColumnIndex(MediaStore.MediaColumns.DATA)
+                    var successCount = 0
+
+                    while (c.moveToNext() && successCount < limit) {
+                        try {
+                            val id = c.getLong(iId)
+                            val dt = c.getLong(iDt)
+
+                            // Verify file exists using file path (faster than opening descriptor)
+                            var fileExists = true
+                            if (iData >= 0) {
+                                val filePath = c.getString(iData)
+                                if (filePath != null) {
+                                    fileExists = File(filePath).exists()
+                                }
+                            }
+
+                            if (fileExists) {
+                                val u = ContentUris.withAppendedId(uri, id)
+                                add(dt to Thumb(u, isVideo))
+                                successCount++
+                            }
+                        } catch (e: Exception) {
+                            Log.d("MediaCamera", "Error reading media item: ${e.message}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MediaCamera", "Error querying media: ${if (isVideo) "videos" else "images"}", e)
+            }
+        }
+
+        val results = buildList<Pair<Long, Thumb>> {
+            when (config.mediaType) {
+                MediaType.PHOTO_ONLY -> {
+                    addAll(q(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED, false))
+                }
+                MediaType.VIDEO_ONLY -> {
+                    addAll(q(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, MediaStore.Video.Media._ID, MediaStore.Video.Media.DATE_ADDED, true))
+                }
+                MediaType.BOTH -> {
+                    addAll(q(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED, false))
+                    addAll(q(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, MediaStore.Video.Media._ID, MediaStore.Video.Media.DATE_ADDED, true))
+                }
+            }
+        }
+
+        return results.sortedByDescending { it.first }.map { it.second }.take(limit)
+    }
+
+    /**
+     * Queries the [MediaStore] for images and videos WITH validation (slower).
+     * Use only when you need to ensure files exist.
      *
      * @param limit The maximum number of items to query.
      * @return A list of [Thumb] objects.
@@ -188,16 +485,32 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
         val config = _ui.value.config
 
         fun q(uri: Uri, idCol: String, dateCol: String, isVideo: Boolean) = buildList<Pair<Long, Thumb>> {
-            cr.query(uri, arrayOf(idCol, dateCol), null, null, "$dateCol DESC")?.use { c ->
-                val iId = c.getColumnIndexOrThrow(idCol)
-                val iDt = c.getColumnIndexOrThrow(dateCol)
-                var i = 0
-                while (c.moveToNext() && i++ < limit) {
-                    val id = c.getLong(iId); val dt = c.getLong(iDt)
-                    val u = ContentUris.withAppendedId(uri, id)
-                    //val thumbnail = if (isVideo) VideoThumbnailUtils.generate(app, u) else null
-                    add(dt to Thumb(u, isVideo))
+            try {
+                cr.query(uri, arrayOf(idCol, dateCol), null, null, "$dateCol DESC")?.use { c ->
+                    val iId = c.getColumnIndexOrThrow(idCol)
+                    val iDt = c.getColumnIndexOrThrow(dateCol)
+                    var i = 0
+                    while (c.moveToNext() && i++ < limit) {
+                        try {
+                            val id = c.getLong(iId)
+                            val dt = c.getLong(iDt)
+                            val u = ContentUris.withAppendedId(uri, id)
+
+                            // Verify URI is accessible using lighter file descriptor check
+                            runCatching {
+                                cr.openFileDescriptor(u, "r")?.close()
+                            }.onSuccess {
+                                add(dt to Thumb(u, isVideo))
+                            }.onFailure { e ->
+                                Log.w("MediaCamera", "Cannot access URI: $u", e)
+                            }
+                        } catch (e: Exception) {
+                            Log.e("MediaCamera", "Error reading media item", e)
+                        }
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e("MediaCamera", "Error querying media: ${if (isVideo) "videos" else "images"}", e)
             }
         }
 

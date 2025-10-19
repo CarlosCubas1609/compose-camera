@@ -76,7 +76,10 @@ data class MediaCameraUIState(
     val config: MediaCameraConfig = MediaCameraConfig(),
     val gallery: List<MediaThumbnail> = emptyList(),
     val previewImage: Uri? = null,
-    val previewVideo: Uri? = null
+    val previewVideo: Uri? = null,
+    val isLoadingGallery: Boolean = false,
+    val isLoadingThumbs: Boolean = false,
+    val galleryFilter: MediaType = MediaType.BOTH
 )
 
 /**
@@ -102,6 +105,8 @@ fun MediaCameraContent(
     onDismissGallery: () -> Unit = {},
     onToggleSelect: (Uri) -> Unit = {},
     onSendSelection: (List<Uri>) -> Unit = {},
+    onLoadMoreGallery: () -> Unit = {},
+    onFilterChange: (MediaType) -> Unit = {},
     onImagePreviewClose: () -> Unit = {},
     onImagePreviewUse: (Uri) -> Unit = {},
     onVideoPreviewClose: () -> Unit = {},
@@ -151,6 +156,7 @@ fun MediaCameraContent(
                     thumbnails = ui.thumbs,
                     selectedUris = ui.selected,
                     imageLoader = imageLoader,
+                    isLoading = ui.isLoadingThumbs,
                     onItemClick = onItemClick,
                     onItemLongClick = onItemLongClick,
                     onSwipeUp = onSwipeUp
@@ -187,9 +193,13 @@ fun MediaCameraContent(
                 selectedUris = ui.selected,
                 config = ui.config,
                 imageLoader = imageLoader,
+                isLoading = ui.isLoadingGallery,
+                currentFilter = ui.galleryFilter,
                 onDismiss = onDismissGallery,
+                onFilterChange = onFilterChange,
                 onToggleSelect = onToggleSelect,
-                onSendSelection = onSendSelection
+                onSendSelection = onSendSelection,
+                onLoadMore = onLoadMoreGallery
             )
         }
 
@@ -276,9 +286,13 @@ fun MediaCameraScreen(
     val ui by vm.ui.collectAsState()
 
     val imageLoader = remember {
-        ImageLoader.Builder(ctx).components {
-            add(VideoFrameDecoder.Factory())
-        }.build()
+        ImageLoader.Builder(ctx)
+            .components {
+                add(VideoFrameDecoder.Factory())
+            }
+            .crossfade(true)
+            .respectCacheHeaders(false)
+            .build()
     }
 
     LaunchedEffect(Unit) { vm.loadThumbs() }
@@ -409,7 +423,10 @@ fun MediaCameraScreen(
             config = ui.config,
             gallery = ui.gallery.map { MediaThumbnail(it.uri, it.isVideo) },
             previewImage = ui.previewImage,
-            previewVideo = ui.previewVideo
+            previewVideo = ui.previewVideo,
+            isLoadingGallery = ui.isLoadingGallery,
+            isLoadingThumbs = ui.isLoadingThumbs,
+            galleryFilter = ui.galleryFilter
         ),
         imageLoader = imageLoader,
         shutterModifier = shutterModifier,
@@ -441,6 +458,8 @@ fun MediaCameraScreen(
             sendUris(uris)
             showGallery = false
         },
+        onLoadMoreGallery = { vm.loadMoreGallery() },
+        onFilterChange = { filter -> vm.setGalleryFilter(filter) },
         onImagePreviewClose = { vm.dismissImagePreview() },
         onImagePreviewUse = { croppedUri ->
             vm.saveImageAndSend(croppedUri) { permanentUri ->
