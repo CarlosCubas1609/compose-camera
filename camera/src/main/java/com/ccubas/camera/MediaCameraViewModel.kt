@@ -7,7 +7,6 @@ import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Matrix
 import android.media.MediaCodec
 import java.io.FileOutputStream
 import android.media.MediaExtractor
@@ -48,6 +47,7 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.util.concurrent.Executor
 import kotlin.math.max
+import androidx.core.graphics.scale
 
 /**
  * Represents the state of the media camera UI.
@@ -690,7 +690,7 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
                         )
                         val newWidth = (rotatedBitmap.width * scale).toInt()
                         val newHeight = (rotatedBitmap.height * scale).toInt()
-                        rotatedBitmap = Bitmap.createScaledBitmap(rotatedBitmap, newWidth, newHeight, true)
+                        rotatedBitmap = rotatedBitmap.scale(newWidth, newHeight)
                     }
 
                     _ui.update { it.copy(previewImage = rotatedBitmap) }
@@ -957,7 +957,7 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
                 val timestamp = System.currentTimeMillis()
                 val file = if (config.saveToMediaStore) {
                     // Temporary file, will be copied to MediaStore then deleted
-                    File(app.cacheDir, "IMG_$timestamp.jpg")
+                    File.createTempFile("IMG_$timestamp", ".jpg", app.cacheDir)
                 } else {
                     // Permanent file in filesDir for client
                     File(app.filesDir, "IMG_$timestamp.jpg")
