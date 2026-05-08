@@ -10,6 +10,7 @@ A powerful WhatsApp-style camera library for Jetpack Compose with advanced featu
 - **Media selection** with configurable limits
 - **Built-in gallery** with carousel view
 - **Photo/video cropping** and trimming
+- **Image editor with annotations** — rectangle, circle, and freehand pencil tools with color picker, undo, and per-shape resize/move/delete
 - **Smart carousel** that hides during recording
 - **Configurable storage** - temporary URIs, permanent MediaStore, or custom directories
 - **Bitmap launcher** - work with photos in memory without disk I/O
@@ -208,10 +209,23 @@ If not specified, uses default system directories:
 - **Long press** - Not available in video mode
 
 ### Gallery
-- **Tap thumbnail** - Preview with crop/trim options
+- **Tap thumbnail** - Open the image editor (photos) or trim slider (videos)
 - **Long press thumbnail** - Start selection mode
 - **Tap after long press** - Add/remove from selection
 - **Swipe up on carousel** - Open full gallery
+
+### Image Editor
+
+When you tap a photo thumbnail, the editor opens with these tools:
+
+- **Crop** - Launch the crop overlay (annotations are cleared if you crop)
+- **Square / Circle** - Drag on empty space to draw a new shape; drag the body of an existing shape to move it; drag a corner handle to resize
+- **Pencil** - Freehand stroke with the selected color and thickness
+- **Color picker** - 8 preset colors above the toolbar
+- **Stroke width slider** - Adjusts thickness for new shapes/strokes (live preview circle on the left)
+- **Undo** (top-right) - Removes the last annotation
+- **Active-shape actions** - Tap ✓ (top-right of the shape) to deselect, tap ✗ to delete
+- **Usar foto** - Flattens the annotations onto the bitmap and returns it via the launcher's callback
 
 ## 🔧 Customization
 
