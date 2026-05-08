@@ -16,7 +16,13 @@ release/
 
 # Gradle files
 .gradle/
+**/.gradle/
 build/
+**/build/
+
+# Kotlin compiler caches
+.kotlin/
+**/.kotlin/
 
 # Local configuration file (sdk path, etc)
 local.properties
