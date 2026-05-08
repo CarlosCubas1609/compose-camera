@@ -1,0 +1,15 @@
+# JitPack build configuration. See https://docs.jitpack.io/building/
+#
+# This project uses Java 21 (kotlinOptions.jvmTarget = "21"), so we pin the JDK explicitly —
+# JitPack defaults to JDK 8/11.
+#
+# `$VERSION` is exported by JitPack as the Git tag being built. We forward it as a Gradle
+# property so SDK_VERSION in gradle.properties is overridden per-tag without manual edits.
+#
+# `:app` is the sample and is intentionally NOT published.
+
+jdk:
+  - openjdk21
+
+install:
+  - ./gradlew :camera:publishToMavenLocal -PSDK_VERSION=$VERSION

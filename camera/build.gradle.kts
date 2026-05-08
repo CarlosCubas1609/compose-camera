@@ -9,9 +9,12 @@ plugins {
     id("maven-publish")
 }
 
-val keystorePropertiesFile = rootProject.file("keystore.properties")
-val keystoreProperties = Properties()
-keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+// keystore.properties is gitignored — only present on machines that publish releases.
+// Loading is best-effort so CI / JitPack / fresh clones don't fail at configuration time.
+val keystoreProperties = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) FileInputStream(f).use { load(it) }
+}
 
 
 android {
@@ -86,9 +89,9 @@ afterEvaluate {
         publications {
             create<MavenPublication>("release") {
                 from(components["release"])
-                groupId = "com.github.carloscubas1609"
+                groupId = "com.github.CarlosCubas1609"
                 artifactId = "compose-camera"
-                version = "1.0.0"
+                version = providers.gradleProperty("SDK_VERSION").get()
                 pom {
                     name.set("compose-camera")
                     description.set("Compose Camera")
@@ -111,31 +114,3 @@ afterEvaluate {
         }
     }
 }
-/*
-publishing {
-    publications {
-        create<MavenPublication>("release") {
-            groupId = "com.github.CarlosCubas1609"
-            artifactId = "compose-camera"
-            version = "1.0.0"
-            afterEvaluate { from(components["release"]) }
-            pom {
-                name.set("compose-camera"); description.set("Compose Camera")
-                url.set("https://github.com/CarlosCubas1609/compose-camera")
-                licenses { license { name.set("Apache-2.0"); url.set("https://www.apache.org/licenses/LICENSE-2.0") } }
-                scm { url.set("https://github.com/CarlosCubas1609/compose-camera") }
-                developers { developer { id.set("CarlosCubas1609"); name.set("Carlos Cubas") } }
-            }
-        }
-    }
-    repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/CarlosCubas1609/compose-camera")
-            credentials {
-                username = keystoreProperties["GITHUB_ACTOR"] as String? ?: System.getenv("GITHUB_ACTOR")
-                password = keystoreProperties["GITHUB_TOKEN"] as String? ?: System.getenv("GITHUB_TOKEN")
-            }
-        }
-    }
-}*/
