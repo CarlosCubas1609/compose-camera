@@ -21,6 +21,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import com.ccubas.camera.components.MinimalRangeSlider
 import kotlinx.coroutines.delay
 import kotlin.math.max
 import kotlin.math.min
@@ -111,7 +112,7 @@ fun VideoReviewOverlay(
                     }
                 )
 
-                RangeSlider(
+                MinimalRangeSlider(
                     value = range,
                     onValueChange = { r ->
                         val s = r.start.coerceIn(0f, vMax)
@@ -182,7 +183,7 @@ fun VideoReviewPreview() {
 
                 // Mock range slider
                 var mockRange by remember { mutableStateOf(10f..30f) }
-                RangeSlider(
+                MinimalRangeSlider(
                     value = mockRange,
                     onValueChange = { mockRange = it },
                     valueRange = 0f..60f
@@ -221,7 +222,7 @@ fun VideoTrimControlsPreview() {
         
         Spacer(modifier = Modifier.height(8.dp))
         
-        RangeSlider(
+        MinimalRangeSlider(
             value = mockRange,
             onValueChange = { mockRange = it },
             valueRange = 0f..60f

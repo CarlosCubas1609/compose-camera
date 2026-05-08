@@ -347,7 +347,10 @@ class CropperState(private val context: Context, private val imageUri: Uri, star
         } catch (_: Throwable) {
             base.recycle(); return@withContext null
         }
-        base.recycle()
+        // Bitmap.createBitmap returns the same instance when the sub-rect
+        // matches the whole image — recycling `base` would also recycle
+        // `outBmp`, breaking the compress() below.
+        if (outBmp !== base) base.recycle()
 
         // Save the cropped bitmap
         val out = File(context.cacheDir, "CROP_${System.currentTimeMillis()}.jpg")

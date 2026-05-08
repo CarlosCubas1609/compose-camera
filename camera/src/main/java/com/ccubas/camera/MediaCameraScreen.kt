@@ -44,6 +44,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.ImageLoader
 import coil.decode.VideoFrameDecoder
+import com.ccubas.camera.components.MinimalRangeSlider
 import com.ccubas.camera.components.camera.CameraControls
 import com.ccubas.camera.components.camera.CameraTopBar
 import com.ccubas.camera.components.camera.ImageReviewWithCropOverlay
@@ -606,7 +607,7 @@ private fun VideoReviewOverlay(
                 }
             )
 
-            RangeSlider(
+            MinimalRangeSlider(
                 value = range,
                 onValueChange = { r ->
                     val s = r.start.coerceIn(0f, vMax)

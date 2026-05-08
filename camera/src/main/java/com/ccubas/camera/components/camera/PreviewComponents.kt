@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import com.ccubas.camera.components.MinimalRangeSlider
 
 /**
  * Composable de prueba que muestra todos los componentes de preview
@@ -184,7 +185,7 @@ fun VideoReviewDemoPreview() {
                 
                 var mockRange by remember { mutableStateOf(5f..25f) }
                 
-                RangeSlider(
+                MinimalRangeSlider(
                     value = mockRange,
                     onValueChange = { mockRange = it },
                     valueRange = 0f..60f
