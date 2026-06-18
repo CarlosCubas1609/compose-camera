@@ -335,7 +335,6 @@ fun MediaCameraScreen(
         onClose()
     }
 
-
     // --- Shutter ---
     val shutterModifier =
         Modifier.pointerInput(ui.mode, longPressMs, hasAudio, ui.config.mediaType) {
