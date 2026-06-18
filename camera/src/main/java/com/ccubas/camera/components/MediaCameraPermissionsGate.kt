@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -17,17 +16,18 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
 import com.ccubas.camera.utils.MediaPerms
 
 /**
@@ -43,23 +43,23 @@ fun MediaCameraPermissionsGate(
 ) {
     val ctx = LocalContext.current
     val activity = remember(ctx) { ctx.findActivity() }
-
-    val perms = remember {
-        MediaPerms.required().toTypedArray()
-    }
+    val perms = remember { MediaPerms.required().toTypedArray() }
 
     var asked by rememberSaveable { mutableStateOf(false) }
-    var granted by remember { mutableStateOf(false) }
+    // Initialize synchronously so there's no flash when permissions are already granted
+    var granted by remember { mutableStateOf(MediaPerms.isGranted(ctx)) }
 
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { res ->
-        granted = perms.all { p ->
-            res[p] == true || ContextCompat.checkSelfPermission(ctx, p) == PackageManager.PERMISSION_GRANTED
-        }
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ ->
+        // Use isGranted() instead of checking res directly: on Android 14, partial access
+        // (READ_MEDIA_VISUAL_USER_SELECTED granted) also counts as sufficient even if
+        // READ_MEDIA_IMAGES is DENIED.
+        granted = MediaPerms.isGranted(ctx)
         asked = true
     }
 
     LaunchedEffect(Unit) {
-        granted = perms.all { p -> ContextCompat.checkSelfPermission(ctx, p) == PackageManager.PERMISSION_GRANTED }
         if (!granted) launcher.launch(perms)
     }
 
@@ -92,8 +92,6 @@ fun MediaCameraPermissionsGate(
 
 /**
  * Extension function to find the underlying [Activity] from a [Context].
- *
- * @return The [Activity] if found, otherwise null.
  */
 tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
