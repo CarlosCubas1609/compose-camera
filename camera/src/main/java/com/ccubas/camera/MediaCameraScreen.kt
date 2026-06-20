@@ -126,6 +126,7 @@ fun MediaCameraContent(
         }
     }
 ) {
+    val ctx = LocalContext.current
     Box(Modifier
         .fillMaxSize()
         .background(Color.Black)) {
