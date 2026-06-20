@@ -335,6 +335,9 @@ fun MediaCameraScreen(
     }
     LaunchedEffect(Unit) { controller.bindToLifecycle(owner) }
 
+    var showGallery by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(showGallery) { if (showGallery) vm.loadGallery() }
+
     // API 34+: galería usa Photo Picker del sistema (sin permisos de media).
     // API ≤33: galería inline con MediaStore.
     val isApi34Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
@@ -354,9 +357,6 @@ fun MediaCameraScreen(
             showGallery = true
         }
     }
-
-    var showGallery by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(showGallery) { if (showGallery) vm.loadGallery() }
 
     val longPressMs = 250L
     val hasAudio = remember {
