@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import android.Manifest
 import android.content.pm.PackageManager
 import com.ccubas.camera.utils.MediaPerms
 
@@ -63,7 +64,14 @@ fun MediaCameraPermissionsGate(
         if (!granted) launcher.launch(perms)
     }
 
-    val permanentlyDenied = asked && !granted && activity != null && perms.any { p ->
+    // Only CAMERA and RECORD_AUDIO are checked for permanent denial.
+    // Media permissions (READ_MEDIA_IMAGES, VISUAL_USER_SELECTED, etc.) must NOT be included:
+    // on Android 14+ dismissing the photo picker makes shouldShowRequestPermissionRationale
+    // return false — identical to permanent denial — causing a false positive here.
+    val hardPerms = remember {
+        arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+    }
+    val permanentlyDenied = asked && !granted && activity != null && hardPerms.any { p ->
         ContextCompat.checkSelfPermission(ctx, p) != PackageManager.PERMISSION_GRANTED &&
                 !ActivityCompat.shouldShowRequestPermissionRationale(activity, p)
     }
