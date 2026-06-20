@@ -35,6 +35,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
@@ -91,6 +93,7 @@ fun MediaCameraContent(
     ui: MediaCameraUIState,
     imageLoader: ImageLoader,
     shutterModifier: Modifier = Modifier,
+    mediaGranted: Boolean = true,
     showGallery: Boolean = false,
     onClose: () -> Unit = {},
     onFlashTorchToggle: () -> Unit = {},
@@ -157,7 +160,7 @@ fun MediaCameraContent(
                     selectedUris = ui.selected,
                     imageLoader = imageLoader,
                     isLoading = ui.isLoadingThumbs,
-                    mediaGranted = MediaPerms.isMediaGranted(ctx),
+                    mediaGranted = mediaGranted,
                     onOpenSettings = { MediaPerms.openAppSettings(ctx) },
                     onItemClick = onItemClick,
                     onItemLongClick = onItemLongClick,
@@ -297,7 +300,19 @@ fun MediaCameraScreen(
             .build()
     }
 
-    LaunchedEffect(Unit) { vm.loadThumbs() }
+    // Reactive: re-check media permission on every resume so returning from Settings reloads
+    var mediaGranted by remember { mutableStateOf(MediaPerms.isMediaGranted(ctx)) }
+    DisposableEffect(owner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                mediaGranted = MediaPerms.isMediaGranted(ctx)
+            }
+        }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(mediaGranted) { if (mediaGranted) vm.loadThumbs() }
 
     // Set initial mode based on configuration
     LaunchedEffect(config.mediaType) {
@@ -431,6 +446,7 @@ fun MediaCameraScreen(
         ),
         imageLoader = imageLoader,
         shutterModifier = shutterModifier,
+        mediaGranted = mediaGranted,
         showGallery = showGallery,
         onClose = onClose,
         onFlashTorchToggle = {
