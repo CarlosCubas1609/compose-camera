@@ -248,13 +248,18 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
         val config = _ui.value.config
         val mediaType = mediaTypeFilter ?: config.mediaType
 
+        // On API 34+ media permissions are not available; query only files captured by this app.
+        val ownPkgOnly = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+        val pkgSelection = if (ownPkgOnly) "${MediaStore.MediaColumns.OWNER_PACKAGE_NAME} = ?" else null
+        val pkgArgs = if (ownPkgOnly) arrayOf(app.packageName) else null
+
         fun q(uri: Uri, idCol: String, dateCol: String, isVideo: Boolean) = buildList<Thumb> {
             try {
                 val projection = arrayOf(idCol, dateCol, MediaStore.MediaColumns.DATA)
                 val sortOrder = "$dateCol DESC"
                 Log.d("MediaCamera", "queryMediaPaged: Querying ${if (isVideo) "videos" else "images"}")
 
-                cr.query(uri, projection, null, null, sortOrder)?.use { c ->
+                cr.query(uri, projection, pkgSelection, pkgArgs, sortOrder)?.use { c ->
                     val cursorSize = c.count
                     Log.d("MediaCamera", "queryMediaPaged: Cursor size for ${if (isVideo) "videos" else "images"}: $cursorSize")
 
@@ -326,7 +331,7 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
                             val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED, MediaStore.MediaColumns.DATA)
                             val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
 
-                            cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, null, null, sortOrder)?.use { c ->
+                            cr.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, projection, pkgSelection, pkgArgs, sortOrder)?.use { c ->
                                 Log.d("MediaCamera", "queryMediaPaged: Images cursor size: ${c.count}")
                                 val iId = c.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
                                 val iDt = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
@@ -365,7 +370,7 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
                             val projection = arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.DATE_ADDED, MediaStore.MediaColumns.DATA)
                             val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
 
-                            cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, projection, null, null, sortOrder)?.use { c ->
+                            cr.query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, projection, pkgSelection, pkgArgs, sortOrder)?.use { c ->
                                 Log.d("MediaCamera", "queryMediaPaged: Videos cursor size: ${c.count}")
                                 val iId = c.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
                                 val iDt = c.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
@@ -580,6 +585,13 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
         } else if (selectedSet.size < config.maxSelection) {
             selectedSet.add(uri)
         }
+        _ui.update { it.copy(selected = selectedSet.toList()) }
+    }
+
+    /** Adds URIs returned by the system Photo Picker (API 34+) to the selection. */
+    fun addPickerSelection(uris: List<Uri>) {
+        val maxSel = _ui.value.config.maxSelection
+        uris.filter { it !in selectedSet }.take(maxSel - selectedSet.size).forEach { selectedSet.add(it) }
         _ui.update { it.copy(selected = selectedSet.toList()) }
     }
 
