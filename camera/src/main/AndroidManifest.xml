@@ -1,4 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+        Permissions required by the camera library.
+        Declared here so consuming apps don't need to add them manually.
+        READ_MEDIA_IMAGES + READ_MEDIA_VIDEO + READ_MEDIA_VISUAL_USER_SELECTED must all be
+        declared without maxSdkVersion so Android 14+ shows the "Allow all / Select photos /
+        Don't allow" system dialog when the three are requested together at runtime.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        android:maxSdkVersion="33" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_VIDEO"
+        android:maxSdkVersion="33" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+
 </manifest>
