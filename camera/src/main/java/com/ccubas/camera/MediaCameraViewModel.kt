@@ -276,9 +276,10 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
                             val id = c.getLong(iId)
                             val dt = c.getLong(iDt)
 
-                            // Quick file existence check
+                            // On API 29+ scoped storage, File.exists() is unreliable for MediaStore
+                            // paths even when the media permission is granted — skip and trust the cursor.
                             var fileExists = true
-                            if (iData >= 0) {
+                            if (iData >= 0 && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                                 val filePath = c.getString(iData)
                                 if (filePath != null) {
                                     fileExists = File(filePath).exists()
@@ -337,7 +338,7 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
                                         val id = c.getLong(iId)
                                         val dt = c.getLong(iDt)
                                         var fileExists = true
-                                        if (iData >= 0) {
+                                        if (iData >= 0 && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                                             val filePath = c.getString(iData)
                                             if (filePath != null) {
                                                 fileExists = File(filePath).exists()
@@ -376,7 +377,7 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
                                         val id = c.getLong(iId)
                                         val dt = c.getLong(iDt)
                                         var fileExists = true
-                                        if (iData >= 0) {
+                                        if (iData >= 0 && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                                             val filePath = c.getString(iData)
                                             if (filePath != null) {
                                                 fileExists = File(filePath).exists()
@@ -436,9 +437,9 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
                             val id = c.getLong(iId)
                             val dt = c.getLong(iDt)
 
-                            // Verify file exists using file path (faster than opening descriptor)
+                            // On API 29+ scoped storage, File.exists() is unreliable — skip.
                             var fileExists = true
-                            if (iData >= 0) {
+                            if (iData >= 0 && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                                 val filePath = c.getString(iData)
                                 if (filePath != null) {
                                     fileExists = File(filePath).exists()

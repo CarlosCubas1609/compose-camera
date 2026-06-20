@@ -14,10 +14,13 @@ object MediaPerms {
     /**
      * Permissions to request based on API level.
      *
-     * Android 14+: READ_MEDIA_IMAGES/VIDEO are declared maxSdkVersion=33 in the manifest
-     * (Play Store compliance). Only VISUAL_USER_SELECTED is requested; the system shows the
-     * photo picker so the user can grant partial or full access from Settings.
-     * Android 13: READ_MEDIA_IMAGES + VIDEO for full MediaStore access.
+     * Android 14+ (API 34+): request READ_MEDIA_IMAGES, READ_MEDIA_VIDEO, AND
+     * READ_MEDIA_VISUAL_USER_SELECTED together. The system shows a 3-way dialog:
+     *   "Allow all photos/videos" → full MediaStore access
+     *   "Select photos/videos"   → picker-scoped partial access
+     *   "Don't allow"            → denied
+     * Without READ_MEDIA_IMAGES/VIDEO in the request, "Allow all" is never offered.
+     * Android 13 (API 33): READ_MEDIA_IMAGES + READ_MEDIA_VIDEO for full MediaStore access.
      * Android <13: READ_EXTERNAL_STORAGE.
      */
     fun required(): List<String> {
@@ -26,6 +29,8 @@ object MediaPerms {
                 listOf(
                     Manifest.permission.CAMERA,
                     Manifest.permission.RECORD_AUDIO,
+                    Manifest.permission.READ_MEDIA_IMAGES,
+                    Manifest.permission.READ_MEDIA_VIDEO,
                     Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
                 )
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->

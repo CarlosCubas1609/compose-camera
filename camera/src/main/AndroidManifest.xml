@@ -4,18 +4,18 @@
     <!--
         Permissions required by the camera library.
         Declared here so consuming apps don't need to add them manually.
-        READ_MEDIA_IMAGES + READ_MEDIA_VIDEO + READ_MEDIA_VISUAL_USER_SELECTED must all be
-        declared without maxSdkVersion so Android 14+ shows the "Allow all / Select photos /
-        Don't allow" system dialog when the three are requested together at runtime.
+
+        READ_MEDIA_IMAGES + READ_MEDIA_VIDEO + READ_MEDIA_VISUAL_USER_SELECTED are declared
+        together WITHOUT maxSdkVersion so that on Android 14+ (API 34+) the system shows the
+        three-way dialog: "Allow all photos" / "Select photos" / "Don't allow".
+        - "Allow all"     → READ_MEDIA_IMAGES + READ_MEDIA_VIDEO granted → full gallery access
+        - "Select photos" → READ_MEDIA_VISUAL_USER_SELECTED granted → picker-scoped access
+        Without all three in the manifest, "Allow all" is never offered and the gallery stays empty.
     -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_IMAGES"
-        android:maxSdkVersion="33" />
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_VIDEO"
-        android:maxSdkVersion="33" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
 
 </manifest>
