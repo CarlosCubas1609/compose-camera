@@ -14,10 +14,12 @@ object MediaPerms {
     /**
      * Permissions to request based on API level.
      *
-     * Android 14+ (API 34+): solo CAMERA + RECORD_AUDIO. La galería usa Photo Picker del sistema
-     * (PickMultipleVisualMedia) que no requiere permisos. El carousel muestra sólo archivos
-     * capturados por esta app via OWNER_PACKAGE_NAME filter en MediaStore (sin permisos).
-     * Android 13 (API 33): READ_MEDIA_IMAGES + READ_MEDIA_VIDEO para acceso a MediaStore.
+     * Android 14+ (API 34+): se solicitan READ_MEDIA_IMAGES, READ_MEDIA_VIDEO y
+     * READ_MEDIA_VISUAL_USER_SELECTED juntos. El sistema muestra el diálogo de 3 opciones:
+     *   "Permitir todas" → acceso completo al MediaStore
+     *   "Seleccionar"    → acceso parcial (solo las elegidas en el picker)
+     *   "No permitir"    → denegado
+     * Android 13 (API 33): READ_MEDIA_IMAGES + READ_MEDIA_VIDEO.
      * Android <13: READ_EXTERNAL_STORAGE.
      */
     fun required(): List<String> {
@@ -25,7 +27,10 @@ object MediaPerms {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
                 listOf(
                     Manifest.permission.CAMERA,
-                    Manifest.permission.RECORD_AUDIO
+                    Manifest.permission.RECORD_AUDIO,
+                    Manifest.permission.READ_MEDIA_IMAGES,
+                    Manifest.permission.READ_MEDIA_VIDEO,
+                    Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
                 )
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
                 listOf(
@@ -53,8 +58,9 @@ object MediaPerms {
     fun isMediaGranted(ctx: Context): Boolean {
         fun has(p: String) = ctx.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
         return when {
-            // API 34+: carousel usa OWNER_PACKAGE_NAME (sin permisos), galería usa Photo Picker.
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> true
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
+                has(Manifest.permission.READ_MEDIA_IMAGES) ||
+                has(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
                 has(Manifest.permission.READ_MEDIA_IMAGES) && has(Manifest.permission.READ_MEDIA_VIDEO)
             else ->

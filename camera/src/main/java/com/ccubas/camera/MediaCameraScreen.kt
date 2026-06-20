@@ -4,11 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
-import android.os.Build
 import android.view.View
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
 import androidx.camera.view.*
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -338,26 +334,6 @@ fun MediaCameraScreen(
     var showGallery by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(showGallery) { if (showGallery) vm.loadGallery() }
 
-    // API 34+: galería usa Photo Picker del sistema (sin permisos de media).
-    // API ≤33: galería inline con MediaStore.
-    val isApi34Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
-    val pickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia()
-    ) { uris -> if (uris.isNotEmpty()) vm.addPickerSelection(uris) }
-
-    val openGallery: () -> Unit = {
-        if (isApi34Plus) {
-            val mediaInput = when (ui.config.mediaType) {
-                MediaType.PHOTO_ONLY -> ActivityResultContracts.PickVisualMedia.ImageOnly
-                MediaType.VIDEO_ONLY -> ActivityResultContracts.PickVisualMedia.VideoOnly
-                MediaType.BOTH -> ActivityResultContracts.PickVisualMedia.ImageAndVideo
-            }
-            pickerLauncher.launch(PickVisualMediaRequest(mediaInput))
-        } else {
-            showGallery = true
-        }
-    }
-
     val longPressMs = 250L
     val hasAudio = remember {
         ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) ==
@@ -485,8 +461,8 @@ fun MediaCameraScreen(
             }
         },
         onItemLongClick = { uri -> vm.toggleSelect(uri) },
-        onSwipeUp = openGallery,
-        onGalleryClick = openGallery,
+        onSwipeUp = { showGallery = true },
+        onGalleryClick = { showGallery = true },
         onSwitchCamera = { vm.switchCamera(controller) },
         onModeChange = { mode -> vm.setMode(mode) },
         onSend = { uris -> sendUris(uris) },

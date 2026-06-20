@@ -5,19 +5,20 @@
         Permissions required by the camera library.
         Declared here so consuming apps don't need to add them manually.
 
-        READ_MEDIA_IMAGES + READ_MEDIA_VIDEO con maxSdkVersion="33" para Play Store compliance.
-        En Android 14+ (API 34+) no se solicitan ni usan; en su lugar la galería usa el
-        Photo Picker del sistema (PickMultipleVisualMedia) que no requiere permisos.
-        El carousel en API 34+ consulta sólo archivos capturados por esta app (OWNER_PACKAGE_NAME).
+        En Android 14+ (API 34+) se solicitan los tres juntos; el sistema muestra el diálogo:
+          "Permitir todas las fotos y videos" -> READ_MEDIA_IMAGES + READ_MEDIA_VIDEO (acceso completo)
+          "Seleccionar fotos y videos"        -> READ_MEDIA_VISUAL_USER_SELECTED (acceso parcial)
+          "No permitir"                       -> denegado
+        En Android 13 (API 33): READ_MEDIA_IMAGES + READ_MEDIA_VIDEO.
+        En Android <13: READ_EXTERNAL_STORAGE (declarado por la app cliente si necesario).
+
+        Para que Play Store acepte READ_MEDIA_IMAGES/VIDEO hay que declarar en Play Console
+        Data Safety -> "Photos and videos" -> "Accessed from device".
     -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_IMAGES"
-        android:maxSdkVersion="33" />
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_VIDEO"
-        android:maxSdkVersion="33" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
 
 </manifest>
