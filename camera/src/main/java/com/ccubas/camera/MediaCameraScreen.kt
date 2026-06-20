@@ -52,6 +52,7 @@ import com.ccubas.camera.components.camera.MediaCarousel
 import com.ccubas.camera.components.camera.MediaGallery
 import com.ccubas.camera.components.camera.MediaThumbnail
 import com.ccubas.camera.components.camera.ModeSwitcher
+import com.ccubas.camera.utils.MediaPerms
 import com.ccubas.composecamera.models.CameraMode
 import com.ccubas.composecamera.models.MediaCameraConfig
 import com.ccubas.composecamera.models.MediaType
@@ -155,6 +156,8 @@ fun MediaCameraContent(
                     selectedUris = ui.selected,
                     imageLoader = imageLoader,
                     isLoading = ui.isLoadingThumbs,
+                    mediaGranted = MediaPerms.isMediaGranted(ctx),
+                    onOpenSettings = { MediaPerms.openAppSettings(ctx) },
                     onItemClick = onItemClick,
                     onItemLongClick = onItemLongClick,
                     onSwipeUp = onSwipeUp

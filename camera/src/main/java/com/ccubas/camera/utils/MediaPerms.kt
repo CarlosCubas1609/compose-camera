@@ -14,9 +14,10 @@ object MediaPerms {
     /**
      * Permissions to request based on API level.
      *
-     * Android 14+: request READ_MEDIA_IMAGES + VIDEO + VISUAL_USER_SELECTED together so the
-     * system shows the "Allow all / Select photos / Don't allow" dialog.
-     * Android 13: READ_MEDIA_IMAGES + VIDEO for MediaStore access.
+     * Android 14+: READ_MEDIA_IMAGES/VIDEO are declared maxSdkVersion=33 in the manifest
+     * (Play Store compliance). Only VISUAL_USER_SELECTED is requested; the system shows the
+     * photo picker so the user can grant partial or full access from Settings.
+     * Android 13: READ_MEDIA_IMAGES + VIDEO for full MediaStore access.
      * Android <13: READ_EXTERNAL_STORAGE.
      */
     fun required(): List<String> {
@@ -25,8 +26,6 @@ object MediaPerms {
                 listOf(
                     Manifest.permission.CAMERA,
                     Manifest.permission.RECORD_AUDIO,
-                    Manifest.permission.READ_MEDIA_IMAGES,
-                    Manifest.permission.READ_MEDIA_VIDEO,
                     Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
                 )
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
@@ -45,17 +44,16 @@ object MediaPerms {
         }
     }
 
-    /**
-     * Whether the app has enough media access to show the camera and gallery.
-     *
-     * Android 14+: accepts either full access (READ_MEDIA_IMAGES granted) or partial access
-     * (READ_MEDIA_VISUAL_USER_SELECTED granted) — both let the custom gallery work.
-     */
-    fun isGranted(ctx: Context): Boolean {
+    /** Returns true when CAMERA and RECORD_AUDIO are both granted. */
+    fun isCameraGranted(ctx: Context): Boolean {
         fun has(p: String) = ctx.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
-        val camera = has(Manifest.permission.CAMERA)
-        val audio = has(Manifest.permission.RECORD_AUDIO)
-        val media = when {
+        return has(Manifest.permission.CAMERA) && has(Manifest.permission.RECORD_AUDIO)
+    }
+
+    /** Returns true when the app has enough media access to query the gallery. */
+    fun isMediaGranted(ctx: Context): Boolean {
+        fun has(p: String) = ctx.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
+        return when {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
                 has(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) ||
                 has(Manifest.permission.READ_MEDIA_IMAGES)
@@ -64,8 +62,10 @@ object MediaPerms {
             else ->
                 has(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
-        return camera && audio && media
     }
+
+    /** Returns true when both camera and media permissions are granted. */
+    fun isGranted(ctx: Context): Boolean = isCameraGranted(ctx) && isMediaGranted(ctx)
 
     /**
      * Opens the application's settings screen to allow the user to manage permissions manually.
