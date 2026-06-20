@@ -14,9 +14,11 @@ object MediaPerms {
     /**
      * Permissions to request based on API level.
      *
-     * Android 14+: declare READ_MEDIA_IMAGES + VIDEO + VISUAL_USER_SELECTED together so the
-     * system shows the full dialog with "Allow all" / "Select photos" / "Don't allow".
-     * Android 13: READ_MEDIA_IMAGES + VIDEO for direct MediaStore access (custom gallery/carousel).
+     * Android 14+: READ_MEDIA_IMAGES/VIDEO are declared maxSdkVersion=33 in the manifest so
+     * they must NOT be requested on API 34+ (system auto-denies undeclared permissions and
+     * shouldShowRequestPermissionRationale returns false, triggering a false permanentlyDenied).
+     * Only READ_MEDIA_VISUAL_USER_SELECTED is needed on API 34+.
+     * Android 13: READ_MEDIA_IMAGES + VIDEO for direct MediaStore access.
      * Android <13: READ_EXTERNAL_STORAGE.
      */
     fun required(): List<String> {
@@ -25,8 +27,6 @@ object MediaPerms {
                 listOf(
                     Manifest.permission.CAMERA,
                     Manifest.permission.RECORD_AUDIO,
-                    Manifest.permission.READ_MEDIA_IMAGES,
-                    Manifest.permission.READ_MEDIA_VIDEO,
                     Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
                 )
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
