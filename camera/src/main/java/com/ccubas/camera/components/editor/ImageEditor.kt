@@ -229,10 +229,11 @@ fun ImageEditorScreen(
     src: Bitmap,
     onClose: () -> Unit = {},
     onUse: (Bitmap) -> Unit = {},
-    aspect: Float? = null
+    aspect: Float? = null,
+    state: EditorState = rememberEditorState(),
+    additionalBottomContent: (@Composable () -> Unit)? = null
 ) {
     var baseBitmap by remember(src) { mutableStateOf(src) }
-    val state = rememberEditorState()
     val scope = rememberCoroutineScope()
     var showCropper by remember { mutableStateOf(false) }
     var processing by remember { mutableStateOf(false) }
@@ -251,7 +252,7 @@ fun ImageEditorScreen(
             state = state,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 200.dp)
+                .padding(bottom = if (additionalBottomContent != null) 280.dp else 200.dp)
         )
 
         // Top: close + undo
@@ -304,8 +305,10 @@ fun ImageEditorScreen(
                         onUse(flat)
                     }
                 },
-                useEnabled = !processing
+                useEnabled = !processing,
+                showConfirmButton = additionalBottomContent == null
             )
+            additionalBottomContent?.invoke()
         }
     }
 
@@ -771,7 +774,8 @@ private fun ToolbarRow(
     state: EditorState,
     onCropClick: () -> Unit,
     onUseClick: () -> Unit,
-    useEnabled: Boolean
+    useEnabled: Boolean,
+    showConfirmButton: Boolean = true
 ) {
     Row(
         Modifier
@@ -783,7 +787,7 @@ private fun ToolbarRow(
         Row(verticalAlignment = Alignment.CenterVertically) {
             ToolButton(
                 icon = Icons.Outlined.Crop,
-                selected = false, // crop launches modal — never sticky
+                selected = false,
                 onClick = onCropClick
             )
             Spacer(Modifier.width(4.dp))
@@ -805,13 +809,15 @@ private fun ToolbarRow(
                 onClick = { state.tool = EditorTool.Pencil; state.activeId = null }
             )
         }
-        Button(
-            onClick = onUseClick,
-            enabled = useEnabled
-        ) {
-            Text("Usar foto")
-            Spacer(Modifier.width(8.dp))
-            Icon(Icons.Outlined.Check, null)
+        if (showConfirmButton) {
+            Button(
+                onClick = onUseClick,
+                enabled = useEnabled
+            ) {
+                Text("Usar foto")
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.Outlined.Check, null)
+            }
         }
     }
 }
@@ -905,7 +911,10 @@ private fun StrokeWidthSlider(state: EditorState) {
 
 // ===== FLATTEN =====
 
-private fun flattenToBitmap(base: Bitmap, annotations: List<Annotation>): Bitmap {
+fun flattenAnnotations(base: Bitmap, annotations: List<Annotation>): Bitmap =
+    flattenToBitmap(base, annotations)
+
+internal fun flattenToBitmap(base: Bitmap, annotations: List<Annotation>): Bitmap {
     if (annotations.isEmpty()) return base
     val out = base.copy(Bitmap.Config.ARGB_8888, true)
     val canvas = android.graphics.Canvas(out)

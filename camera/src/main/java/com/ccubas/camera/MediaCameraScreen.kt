@@ -4,7 +4,11 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.view.View
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
 import androidx.camera.view.*
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -54,6 +58,7 @@ import com.ccubas.camera.components.camera.MediaCarousel
 import com.ccubas.camera.components.camera.MediaGallery
 import com.ccubas.camera.components.camera.MediaThumbnail
 import com.ccubas.camera.components.camera.ModeSwitcher
+import com.ccubas.camera.components.camera.PickerReviewScreen
 import com.ccubas.camera.utils.MediaPerms
 import com.ccubas.composecamera.models.CameraMode
 import com.ccubas.composecamera.models.MediaCameraConfig
@@ -101,6 +106,7 @@ fun MediaCameraContent(
     onItemLongClick: (Uri) -> Unit = {},
     onSwipeUp: () -> Unit = {},
     onGalleryClick: () -> Unit = {},
+    onPickerRequest: (() -> Unit)? = null,
     onSwitchCamera: () -> Unit = {},
     onModeChange: (CameraMode) -> Unit = {},
     onSend: (List<Uri>) -> Unit = {},
@@ -162,6 +168,7 @@ fun MediaCameraContent(
                     isLoading = ui.isLoadingThumbs,
                     mediaGranted = mediaGranted,
                     onOpenSettings = { MediaPerms.openAppSettings(ctx) },
+                    onPickerRequest = onPickerRequest,
                     onItemClick = onItemClick,
                     onItemLongClick = onItemLongClick,
                     onSwipeUp = onSwipeUp
@@ -300,19 +307,24 @@ fun MediaCameraScreen(
             .build()
     }
 
-    // Reactive: re-check media permission on every resume so returning from Settings reloads
+    // Reactive: re-check media permission on every resume so returning from Settings reloads.
+    // We also force loadThumbs() on every resume (not just on permission change) because on
+    // API 34+ READ_MEDIA_IMAGES is absent from the manifest — the user may grant
+    // READ_MEDIA_VISUAL_USER_SELECTED via Settings and we need to pick up newly accessible files.
     var mediaGranted by remember { mutableStateOf(MediaPerms.isMediaGranted(ctx)) }
     DisposableEffect(owner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                mediaGranted = MediaPerms.isMediaGranted(ctx)
+                val nowGranted = MediaPerms.isMediaGranted(ctx)
+                mediaGranted = nowGranted
+                if (nowGranted) vm.loadThumbs()
             }
         }
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(mediaGranted) { if (mediaGranted) vm.loadThumbs() }
+    LaunchedEffect(Unit) { if (mediaGranted) vm.loadThumbs() }
 
     // Set initial mode based on configuration
     LaunchedEffect(config.mediaType) {
@@ -333,6 +345,30 @@ fun MediaCameraScreen(
 
     var showGallery by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(showGallery) { if (showGallery) vm.loadGallery() }
+
+    // PickVisualMedia fallback: used when media permissions are denied.
+    // On API 33, READ_MEDIA_IMAGES/VIDEO are available but user may deny them.
+    // On API 34+, READ_MEDIA_VISUAL_USER_SELECTED covers the built-in gallery.
+    var pickerReviewUris by remember { mutableStateOf<List<Uri>?>(null) }
+    val pickSingle = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri -> uri?.let { pickerReviewUris = listOf(it) } }
+    val pickMultiple = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(
+            maxItems = config.maxSelection.takeIf { it != Int.MAX_VALUE && it >= 2 } ?: 50
+        )
+    ) { uris -> if (uris.isNotEmpty()) pickerReviewUris = uris }
+
+    // On API 34+, READ_MEDIA_IMAGES is declared with maxSdkVersion=33 in the library manifest,
+    // so it cannot be granted on API 34+ devices. The built-in gallery would always be empty.
+    // Use PickVisualMedia (→ PickerReviewScreen) for the gallery button on API 34+ instead.
+    val galleryAlwaysUsesPicker = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+
+    fun launchPicker(mediaFilter: ActivityResultContracts.PickVisualMedia.VisualMediaType) {
+        val request = PickVisualMediaRequest(mediaFilter)
+        if (config.maxSelection == 1) pickSingle.launch(request)
+        else pickMultiple.launch(request)
+    }
 
     val longPressMs = 250L
     val hasAudio = remember {
@@ -461,8 +497,32 @@ fun MediaCameraScreen(
             }
         },
         onItemLongClick = { uri -> vm.toggleSelect(uri) },
-        onSwipeUp = { showGallery = true },
-        onGalleryClick = { showGallery = true },
+        onSwipeUp = {
+            val mediaFilter = when (config.mediaType) {
+                MediaType.PHOTO_ONLY -> ActivityResultContracts.PickVisualMedia.ImageOnly
+                MediaType.VIDEO_ONLY -> ActivityResultContracts.PickVisualMedia.VideoOnly
+                else -> ActivityResultContracts.PickVisualMedia.ImageAndVideo
+            }
+            if (!mediaGranted || galleryAlwaysUsesPicker) launchPicker(mediaFilter)
+            else showGallery = true
+        },
+        onGalleryClick = {
+            val mediaFilter = when (config.mediaType) {
+                MediaType.PHOTO_ONLY -> ActivityResultContracts.PickVisualMedia.ImageOnly
+                MediaType.VIDEO_ONLY -> ActivityResultContracts.PickVisualMedia.VideoOnly
+                else -> ActivityResultContracts.PickVisualMedia.ImageAndVideo
+            }
+            if (!mediaGranted || galleryAlwaysUsesPicker) launchPicker(mediaFilter)
+            else showGallery = true
+        },
+        onPickerRequest = {
+            val mediaFilter = when (config.mediaType) {
+                MediaType.PHOTO_ONLY -> ActivityResultContracts.PickVisualMedia.ImageOnly
+                MediaType.VIDEO_ONLY -> ActivityResultContracts.PickVisualMedia.VideoOnly
+                else -> ActivityResultContracts.PickVisualMedia.ImageAndVideo
+            }
+            launchPicker(mediaFilter)
+        },
         onSwitchCamera = { vm.switchCamera(controller) },
         onModeChange = { mode -> vm.setMode(mode) },
         onSend = { uris -> sendUris(uris) },
@@ -511,6 +571,18 @@ fun MediaCameraScreen(
             )
         }
     )
+
+    // Post-pick review: shown after user selects via system PickVisualMedia
+    pickerReviewUris?.let { uris ->
+        PickerReviewScreen(
+            uris = uris,
+            onConfirm = { resultUris ->
+                pickerReviewUris = null
+                sendUris(resultUris)
+            },
+            onDismiss = { pickerReviewUris = null }
+        )
+    }
 
     // Total cleanup when destroying the composable
     DisposableEffect(Unit) {

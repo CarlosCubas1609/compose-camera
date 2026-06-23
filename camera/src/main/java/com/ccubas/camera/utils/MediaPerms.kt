@@ -24,14 +24,15 @@ object MediaPerms {
      */
     fun required(): List<String> {
         return when {
+            // API 34+: READ_MEDIA_IMAGES/VIDEO no están en el manifest (maxSdkVersion=33).
+            // Solo READ_MEDIA_VISUAL_USER_SELECTED — Google Play lo acepta sin restricciones.
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
                 listOf(
                     Manifest.permission.CAMERA,
                     Manifest.permission.RECORD_AUDIO,
-                    Manifest.permission.READ_MEDIA_IMAGES,
-                    Manifest.permission.READ_MEDIA_VIDEO,
                     Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
                 )
+            // API 33: galería completa con READ_MEDIA_IMAGES + VIDEO.
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
                 listOf(
                     Manifest.permission.CAMERA,
@@ -39,6 +40,7 @@ object MediaPerms {
                     Manifest.permission.READ_MEDIA_IMAGES,
                     Manifest.permission.READ_MEDIA_VIDEO
                 )
+            // API <13: READ_EXTERNAL_STORAGE (declarado por la app cliente con maxSdkVersion=32).
             else ->
                 listOf(
                     Manifest.permission.CAMERA,

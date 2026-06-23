@@ -2,6 +2,7 @@ package com.ccubas.camera.components.camera
 
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -46,6 +47,7 @@ fun MediaCarousel(
     isLoading: Boolean = false,
     mediaGranted: Boolean = true,
     onOpenSettings: () -> Unit = {},
+    onPickerRequest: (() -> Unit)? = null,
     onItemClick: (Uri, Boolean) -> Unit = { _, _ -> },
     onItemLongClick: (Uri) -> Unit = {},
     onSwipeUp: () -> Unit = {}
@@ -58,6 +60,9 @@ fun MediaCarousel(
             .height(76.dp)
     ) {
         if (!mediaGranted) {
+            // API 34+: READ_MEDIA_IMAGES is absent from the manifest (maxSdkVersion=33).
+            // Going to Settings won't help — offer the system photo picker directly instead.
+            val isApi34Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
             Row(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -69,8 +74,14 @@ fun MediaCarousel(
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.weight(1f)
                 )
-                TextButton(onClick = onOpenSettings) {
-                    Text("Abrir ajustes", color = Color.White)
+                if (isApi34Plus && onPickerRequest != null) {
+                    TextButton(onClick = onPickerRequest) {
+                        Text("Seleccionar", color = Color.White)
+                    }
+                } else {
+                    TextButton(onClick = onOpenSettings) {
+                        Text("Abrir ajustes", color = Color.White)
+                    }
                 }
             }
         } else if (isLoading && thumbnails.isEmpty()) {
