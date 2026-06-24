@@ -1,28 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!--
-        Permissions declared by this library.
-
-        API 34+ : READ_MEDIA_VISUAL_USER_SELECTED (acceso parcial al photo-picker del sistema).
-                  Google Play acepta este permiso sin restricción de "core use case".
-        API 33  : READ_MEDIA_IMAGES + READ_MEDIA_VIDEO (maxSdkVersion=33 → no afectan API 34+).
-                  Galería built-in funciona completamente en Android 13.
-        API <13 : READ_EXTERNAL_STORAGE declarado por la app cliente (maxSdkVersion=32).
-    -->
+    <!-- CAMERA y RECORD_AUDIO son los únicos permisos necesarios:
+         PickVisualMedia (API 33+) y READ_MEDIA_VISUAL_USER_SELECTED (API 34+) no requieren
+         que la librería declare READ_MEDIA_IMAGES/VIDEO. Google Play rechaza esos permisos
+         si el caso de uso no es acceso persistente a la galería (policy "core use case"). -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!--
-        maxSdkVersion=33: en API 34+ estas se reemplazan por READ_MEDIA_VISUAL_USER_SELECTED,
-        que Google Play acepta sin restricción de "core use case". La galería built-in sigue
-        funcionando en API 33 y en API <13 (READ_EXTERNAL_STORAGE declarado por la app cliente).
-    -->
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_IMAGES"
-        android:maxSdkVersion="33" />
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_VIDEO"
-        android:maxSdkVersion="33" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
 
 </manifest>
