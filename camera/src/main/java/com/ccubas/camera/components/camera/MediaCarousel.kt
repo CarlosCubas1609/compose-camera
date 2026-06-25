@@ -2,7 +2,6 @@ package com.ccubas.camera.components.camera
 
 import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.os.Build
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -46,8 +45,6 @@ fun MediaCarousel(
     imageLoader: ImageLoader,
     isLoading: Boolean = false,
     mediaGranted: Boolean = true,
-    onOpenSettings: () -> Unit = {},
-    onPickerRequest: (() -> Unit)? = null,
     onItemClick: (Uri, Boolean) -> Unit = { _, _ -> },
     onItemLongClick: (Uri) -> Unit = {},
     onSwipeUp: () -> Unit = {}
@@ -59,32 +56,7 @@ fun MediaCarousel(
             .fillMaxWidth()
             .height(76.dp)
     ) {
-        if (!mediaGranted) {
-            // API 34+: READ_MEDIA_IMAGES is absent from the manifest (maxSdkVersion=33).
-            // Going to Settings won't help — offer the system photo picker directly instead.
-            val isApi34Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
-            Row(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "Sin acceso a fotos",
-                    color = Color.White.copy(alpha = 0.7f),
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.weight(1f)
-                )
-                if (isApi34Plus && onPickerRequest != null) {
-                    TextButton(onClick = onPickerRequest) {
-                        Text("Seleccionar", color = Color.White)
-                    }
-                } else {
-                    TextButton(onClick = onOpenSettings) {
-                        Text("Abrir ajustes", color = Color.White)
-                    }
-                }
-            }
-        } else if (isLoading && thumbnails.isEmpty()) {
+        if (isLoading && thumbnails.isEmpty() && mediaGranted) {
             // Show loading indicator when initially loading
             Box(
                 modifier = Modifier.fillMaxSize(),

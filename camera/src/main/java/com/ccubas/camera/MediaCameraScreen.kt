@@ -167,8 +167,6 @@ fun MediaCameraContent(
                     imageLoader = imageLoader,
                     isLoading = ui.isLoadingThumbs,
                     mediaGranted = mediaGranted,
-                    onOpenSettings = { MediaPerms.openAppSettings(ctx) },
-                    onPickerRequest = onPickerRequest,
                     onItemClick = onItemClick,
                     onItemLongClick = onItemLongClick,
                     onSwipeUp = onSwipeUp
