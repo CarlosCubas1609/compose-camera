@@ -1,6 +1,8 @@
 package com.ccubas.camera.components
 
 
+import com.ccubas.camera.utils.calcularInSampleSize
+import com.ccubas.camera.utils.decodeSampledBitmap
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -100,13 +102,13 @@ class CropperState(private val context: Context, private val imageUri: Uri, star
     private fun decodeOrientedBitmap(forceSoftware: Boolean): Bitmap? = try {
         if (Build.VERSION.SDK_INT >= 28) {
             val src = ImageDecoder.createSource(context.contentResolver, imageUri)
-            ImageDecoder.decodeBitmap(src) { dec, _, _ ->
+            ImageDecoder.decodeBitmap(src) { dec, info, _ ->
+                dec.setTargetSampleSize(calcularInSampleSize(info.size.width, info.size.height))
                 if (forceSoftware) dec.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
                 dec.isMutableRequired = false
             }
         } else {
-            val raw = context.contentResolver.openInputStream(imageUri)?.use(BitmapFactory::decodeStream)
-                ?: return null
+            val raw = context.contentResolver.decodeSampledBitmap(imageUri) ?: return null
             val exif = context.contentResolver.openInputStream(imageUri)?.use(::ExifInterface)
             val m = android.graphics.Matrix().apply {
                 when (exif?.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
@@ -508,15 +510,13 @@ fun CropperFullScreen(
                     val croppedUri = state.crop()
                     if (croppedUri != null) {
                         // Convert cropped Uri back to Bitmap
-                        val inputStream = context.contentResolver.openInputStream(croppedUri)
-                        val croppedBitmap = BitmapFactory.decodeStream(inputStream)
-                        inputStream?.close()
+                        val croppedBitmap = context.contentResolver.decodeSampledBitmap(croppedUri)
 
                         // Delete temp files
                         File(tempUri.path!!).delete()
                         File(croppedUri.path!!).delete()
 
-                        onCropped(croppedBitmap)
+                        croppedBitmap?.let(onCropped)
                     }
                 }
             }) {

@@ -1,5 +1,6 @@
 package com.ccubas.camera.components.camera
 
+import com.ccubas.camera.utils.decodeSampledBitmap
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -87,9 +88,9 @@ fun PickerReviewScreen(
                 isVideoMap[i] = video
                 if (!video) {
                     runCatching {
-                        ctx.contentResolver.openInputStream(uri)?.use { stream ->
-                            bitmaps[i] = BitmapFactory.decodeStream(stream)
-                        }
+                        // Submuestreado: una foto de 50 MP a resolución completa no se puede dibujar
+                        // en el editor (Canvas: trying to draw too large bitmap).
+                        bitmaps[i] = ctx.contentResolver.decodeSampledBitmap(uri)
                     }
                 }
             }

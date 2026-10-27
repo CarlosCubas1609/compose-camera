@@ -1,6 +1,7 @@
 package com.ccubas.camera
 
 
+import com.ccubas.camera.utils.decodeSampledBitmap
 import android.annotation.SuppressLint
 import android.content.ContentUris
 import android.content.ContentValues
@@ -605,9 +606,7 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
             // Load image from Uri as Bitmap
             viewModelScope.launch(Dispatchers.IO) {
                 try {
-                    val inputStream = app.contentResolver.openInputStream(uri)
-                    val bitmap = BitmapFactory.decodeStream(inputStream)
-                    inputStream?.close()
+                    val bitmap = app.contentResolver.decodeSampledBitmap(uri)
 
                     withContext(Dispatchers.Main) {
                         _ui.update { it.copy(previewImage = bitmap, isPreviewingFromCarousel = true) }
@@ -673,7 +672,9 @@ class MediaCameraViewModel(private val app: Context) : ViewModel() {
                     val bytes = ByteArray(buffer.remaining())
                     buffer.get(bytes)
 
-                    val originalBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    // Submuestreado al decodificar: abajo se escala a 2048 igual, pero decodificar
+                    // primero los 50 MP completos podía agotar la memoria.
+                    val originalBitmap = decodeSampledBitmap(bytes) ?: return
 
                     // Get rotation degrees
                     val rotationDegrees = imageProxy.imageInfo.rotationDegrees

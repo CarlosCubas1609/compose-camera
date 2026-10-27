@@ -1,5 +1,6 @@
 package com.ccubas.camera
 
+import com.ccubas.camera.utils.decodeSampledBitmap
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -197,10 +198,8 @@ fun rememberMediaCameraBitmapLauncher(
                                     videoUris.add(uri)
                                 } else {
                                     // It's a photo, convert to Bitmap
-                                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                                        BitmapFactory.decodeStream(inputStream)?.let { bitmap ->
-                                            allBitmaps.add(bitmap)
-                                        }
+                                    context.contentResolver.decodeSampledBitmap(uri)?.let { bitmap ->
+                                        allBitmaps.add(bitmap)
                                     }
                                 }
                             }
