@@ -23,7 +23,10 @@ internal fun calcularInSampleSize(width: Int, height: Int, maxDimension: Int = M
 /** Decodifica [uri] submuestreado a [maxDimension]; null si no se puede leer. */
 internal fun ContentResolver.decodeSampledBitmap(uri: Uri, maxDimension: Int = MAX_BITMAP_DIMENSION): Bitmap? {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+    // Con inJustDecodeBounds decodeStream SIEMPRE devuelve null (solo llena bounds): no usarlo
+    // como señal de error; solo un stream nulo lo es.
+    val boundsStream = openInputStream(uri) ?: return null
+    boundsStream.use { BitmapFactory.decodeStream(it, null, bounds) }
     val options = BitmapFactory.Options().apply {
         inSampleSize = calcularInSampleSize(bounds.outWidth, bounds.outHeight, maxDimension)
     }
